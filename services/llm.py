@@ -6,7 +6,14 @@ import json
 from .models import ClarificationQuestion, ClarificationResponse, JobDefinition, CandidateRank, Evidence, ActionResponse, ChatMessage, ChatResponse
 
 # Multi-model configuration with automatic fallback
-API_KEY = os.environ.get("MS_API_KEY", "ms-45e447b6-6011-42e3-bc04-6de20f7fd4f1")
+# Multi-model configuration with automatic fallback
+# API Key should be set in environment variables
+API_KEY = os.environ.get("MS_API_KEY") 
+if not API_KEY:
+    print("Warning: MS_API_KEY not found in environment variables.")
+    # Fallback/Placeholder if needed, or keep empty to fail fast
+    # API_KEY = "ms-..." 
+
 BASE_URL = "https://api-inference.modelscope.cn/v1"
 
 # Available models in order of preference (GLM first)

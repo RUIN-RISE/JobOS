@@ -22,8 +22,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static Files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# --- STATIC FILES FOR FRONTEND ---
+# Mount the "dist" directory (built frontend)
+# We assume the frontend is built into 'temp_frontend/dist' and copied or available
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIST = os.path.join(APP_ROOT, "temp_frontend", "dist")
+
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+
+# API Routes
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "service": "JobOS-Backend"}
 
 # State (In-memory for MVP)
 CURRENT_JD = None
@@ -31,7 +42,6 @@ GENERATED_RESUMES = []
 CHAT_HISTORY = []  # Store chat history for clarification
 COLLECTED_INFO = {}  # Store collected requirement info
 
-@app.get("/")
 async def read_root():
     return FileResponse('templates/index.html')
 
@@ -221,6 +231,20 @@ async def analyze_resumes():
 @app.post("/api/generate_action", response_model=ActionResponse)
 async def gen_action(req: ActionRequest):
     return llm.generate_action(req.candidate_name, req.action_type, req.job_title)
+
+# Catch-all route for SPA (React)
+# Any route not matched by API or static files serves index.html
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    # If it's an API call that fell through, 404
+    if full_path.startswith("api/"):
+        return {"error": "API route not found"}, 404
+    
+    if os.path.exists(FRONTEND_DIST):
+        index_path = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+    return {"message": "Frontend not built or not found. Run 'npm run build' and ensure 'temp_frontend/dist' exists."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=7860)
