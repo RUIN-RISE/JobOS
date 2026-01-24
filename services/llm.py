@@ -3,6 +3,11 @@ import os
 import re
 from typing import List, Dict
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+load_dotenv()
+
 from .models import ClarificationQuestion, ClarificationResponse, JobDefinition, CandidateRank, Evidence, ActionResponse, ChatMessage, ChatResponse
 
 # Multi-model configuration with automatic fallback
