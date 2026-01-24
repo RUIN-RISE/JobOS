@@ -4,10 +4,15 @@ from typing import List, Optional, Dict
 class JobRequest(BaseModel):
     raw_requirement: str
 
+class ClarificationOption(BaseModel):
+    text: str
+    requires_input: bool = False  # Whether this option needs additional text input
+
 class ClarificationQuestion(BaseModel):
     id: str
     question: str
-    options: Optional[List[str]] = None
+    multi_select: bool = False  # True = checkboxes, False = radio
+    options: Optional[List[ClarificationOption]] = None
 
 class ClarificationResponse(BaseModel):
     questions: List[ClarificationQuestion]
@@ -23,9 +28,9 @@ class JobDefinition(BaseModel):
     key_responsibilities: List[str]
     required_skills: List[str]
     experience_level: str
-    salary: SalaryConfig
-    work_location: str = "公司现场"
-    bonus_skills: List[str]
+    salary: SalaryConfig = SalaryConfig()
+    work_location: str = "杭州"  # Fixed, not editable
+    bonus_skills: List[str] = []
 
 class Resume(BaseModel):
     id: str
@@ -59,3 +64,4 @@ class ActionRequest(BaseModel):
 
 class ActionResponse(BaseModel):
     content: str
+    interview_questions: List[str] = []  # For interview type

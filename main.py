@@ -57,32 +57,98 @@ async def upload_resumes(file: UploadFile = File(...)):
     import io
     
     resumes = []
+    pdf_queue = []  # Queue for batch PDF processing: [(name_str, raw_text), ...]
     
     content = await file.read()
+    
+    def extract_pdf_text(pdf_bytes: bytes) -> str:
+        """Extract text from PDF using PyMuPDF"""
+        try:
+            import fitz  # PyMuPDF
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            return text.strip()
+        except Exception as e:
+            print(f"PDF extraction error: {e}")
+            return ""
+    
+    def process_pdf_batch(batch: list) -> list:
+        """Process a batch of PDFs with one LLM call"""
+        if not batch:
+            return []
+        raw_texts = [item[1] for item in batch]
+        from services.llm import batch_structure_resumes
+        return batch_structure_resumes(raw_texts)
+    
+    BATCH_SIZE = 5
     
     if file.filename.endswith('.zip'):
         with zipfile.ZipFile(io.BytesIO(content), 'r') as zip_ref:
             for filename in zip_ref.namelist():
                 if filename.startswith('__MACOSX') or filename.startswith('.'):
                     continue
-                if filename.endswith('.txt') or filename.endswith('.md'):
-                    # Fix Chinese encoding in Zip
-                    try:
-                        name_str = filename.encode('cp437').decode('gbk')
-                    except:
-                        name_str = filename
-                        
+                    
+                # Fix Chinese encoding in Zip
+                try:
+                    name_str = filename.encode('cp437').decode('gbk')
+                except:
+                    name_str = filename
+                
+                if filename.lower().endswith('.pdf'):
+                    # Queue PDF for batch processing
+                    with zip_ref.open(filename) as f:
+                        raw_bytes = f.read()
+                        raw_text = extract_pdf_text(raw_bytes)
+                        if raw_text:
+                            pdf_queue.append((name_str, raw_text))
+                            
+                elif filename.lower().endswith('.txt') or filename.lower().endswith('.md'):
+                    # Process text files directly
                     with zip_ref.open(filename) as f:
                         text = f.read().decode('utf-8', errors='ignore')
-                        resumes.append(Resume(
-                            id=name_str,
-                            name=os.path.basename(name_str).split('.')[0],
-                            content=text,
-                            parsed_skills=[], # To be filled by analysis if needed
-                            years_experience=3 # Placeholder or extract later
-                        ))
+                        if text:
+                            resumes.append(Resume(
+                                id=name_str,
+                                name=os.path.basename(name_str).split('.')[0],
+                                content=text,
+                                parsed_skills=[],
+                                years_experience=3
+                            ))
+        
+        # Process PDF queue in batches
+        for i in range(0, len(pdf_queue), BATCH_SIZE):
+            batch = pdf_queue[i:i + BATCH_SIZE]
+            print(f"Processing PDF batch {i//BATCH_SIZE + 1}: {len(batch)} files")
+            structured_texts = process_pdf_batch(batch)
+            
+            for j, (name_str, _) in enumerate(batch):
+                text = structured_texts[j] if j < len(structured_texts) else batch[j][1]
+                resumes.append(Resume(
+                    id=name_str,
+                    name=os.path.basename(name_str).split('.')[0],
+                    content=text,
+                    parsed_skills=[],
+                    years_experience=3
+                ))
+                            
+    elif file.filename.lower().endswith('.pdf'):
+        # Single PDF file
+        raw_text = extract_pdf_text(content)
+        if raw_text:
+            from services.llm import structure_resume
+            text = structure_resume(raw_text)
+            resumes.append(Resume(
+                id=file.filename,
+                name=file.filename.split('.')[0],
+                content=text,
+                parsed_skills=[],
+                years_experience=3
+            ))
     else:
-        # Single file
+        # Single text file
         text = content.decode('utf-8', errors='ignore')
         resumes.append(Resume(
             id=file.filename,

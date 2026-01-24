@@ -25,7 +25,10 @@ document.addEventListener('DOMContentLoaded', () => {
 	document.getElementById('btn-retry-clarify')?.addEventListener('click', handleClarify);
 
 	// JD Buttons
-	btnConfirmJd.addEventListener('click', () => switchStep(3));
+	btnConfirmJd.addEventListener('click', () => {
+		saveJdEdits(); // Save user edits
+		switchStep(3);
+	});
 	document.getElementById('btn-retry-jd')?.addEventListener('click', handleGenerateJd);
 
 	const fileInput = document.getElementById('file-upload-input');
@@ -41,6 +44,24 @@ document.addEventListener('DOMContentLoaded', () => {
 	document.querySelector('.close-modal').onclick = () => {
 		document.getElementById('action-modal').classList.add('hidden');
 	};
+
+	// Copy Content Button
+	document.querySelector('.copy-btn')?.addEventListener('click', () => {
+		const modalBody = document.getElementById('modal-body');
+		const emailContent = modalBody.querySelector('.email-content');
+		if (emailContent) {
+			const text = emailContent.innerText;
+			navigator.clipboard.writeText(text).then(() => {
+				alert('邮件内容已复制到剪贴板！');
+			}).catch(err => {
+				console.error('Copy failed:', err);
+			});
+		} else {
+			navigator.clipboard.writeText(modalBody.innerText).then(() => {
+				alert('内容已复制到剪贴板！');
+			});
+		}
+	});
 });
 
 function switchStep(step) {
@@ -97,6 +118,7 @@ async function handleClarify() {
 
 function renderQuestions(questions) {
 	state.questions = questions;
+	state.answers = {}; // Reset answers
 	const container = document.getElementById('clarification-container');
 	container.innerHTML = '';
 
@@ -104,16 +126,34 @@ function renderQuestions(questions) {
 		const card = document.createElement('div');
 		card.className = 'chat-q-card';
 
+		const isMulti = q.multi_select === true;
+		// Note: Don't add (可多选) here - LLM already includes it in question text
+
 		let html = `<span class="q-title">${q.question}</span>`;
 
 		if (q.options && q.options.length > 0) {
-			html += `<div class="q-options">`;
-			q.options.forEach(opt => {
-				html += `<div class="option-pill" onclick="selectOption(this, '${q.id}', '${opt}')">${opt}</div>`;
+			html += `<div class="q-options" data-multi="${isMulti}" data-qid="${q.id}">`;
+			q.options.forEach((opt, idx) => {
+				const optText = typeof opt === 'string' ? opt : opt.text;
+				const needsInput = typeof opt === 'object' && opt.requires_input === true;
+				const inputType = isMulti ? 'checkbox' : 'radio';
+
+				html += `
+					<label class="option-item" style="display: flex; align-items: center; margin: 5px 0; cursor: pointer;">
+						<input type="${inputType}" name="q_${q.id}" value="${optText}" 
+							data-needs-input="${needsInput}" 
+							onchange="handleOptionChange('${q.id}', '${optText}', ${needsInput}, this)"
+							style="margin-right: 8px;">
+						<span class="option-text">${optText}</span>
+					</label>
+					<input type="text" class="q-input-inline hidden" id="input-${q.id}-${idx}" 
+						placeholder="请补充说明..." 
+						data-qid="${q.id}" data-opt="${optText}"
+						oninput="updateInputValue('${q.id}', '${optText}', this.value)"
+						style="margin: 0 0 5px 25px; width: calc(100% - 30px);">
+				`;
 			});
 			html += `</div>`;
-			// Hidden input for custom value or selected value
-			html += `<input type="text" class="q-input hidden" id="input-${q.id}" placeholder="补充说明...">`;
 		} else {
 			html += `<input type="text" class="q-input" id="input-${q.id}" placeholder="请输入回答" onchange="inputAnswer('${q.id}', this.value)">`;
 		}
@@ -123,30 +163,53 @@ function renderQuestions(questions) {
 	});
 }
 
-window.selectOption = (el, qId, val) => {
-	// Visual selection
-	const siblings = el.parentElement.querySelectorAll('.option-pill');
-	siblings.forEach(s => s.classList.remove('selected'));
-	el.classList.add('selected');
+// Handle option selection (checkbox/radio)
+window.handleOptionChange = (qId, optText, needsInput, inputEl) => {
+	const checked = inputEl.checked;
+	const idx = Array.from(inputEl.closest('.q-options').querySelectorAll('input[type="checkbox"], input[type="radio"]')).indexOf(inputEl);
+	const inputField = document.getElementById(`input-${qId}-${idx}`);
 
-	// Check if "specify" or "fill" is in the text
-	const isSpecify = val.includes("填写") || val.includes("其他");
-	const inputEl = document.getElementById(`input-${qId}`);
-
-	if (isSpecify) {
-		inputEl.classList.remove('hidden');
-		inputEl.focus();
-		state.answers[qId] = ""; // Wait for input
-
-		// Add listener to update state on input
-		inputEl.oninput = (e) => {
-			state.answers[qId] = e.target.value;
-		};
-	} else {
-		if (inputEl) inputEl.classList.add('hidden');
-		// Record answer
-		state.answers[qId] = val;
+	// Initialize answer array for multi-select
+	if (!state.answers[qId]) {
+		state.answers[qId] = [];
 	}
+
+	// If it's radio button, reset to single value
+	const isMulti = inputEl.type === 'checkbox';
+
+	if (!isMulti) {
+		// Radio: single selection
+		state.answers[qId] = checked ? optText : '';
+		// Hide all inputs for this question
+		document.querySelectorAll(`input[data-qid="${qId}"].q-input-inline`).forEach(inp => inp.classList.add('hidden'));
+	} else {
+		// Checkbox: array of selections
+		if (checked) {
+			if (!state.answers[qId].includes(optText)) {
+				state.answers[qId].push(optText);
+			}
+		} else {
+			state.answers[qId] = state.answers[qId].filter(v => v !== optText);
+		}
+	}
+
+	// Show/hide input field
+	if (inputField) {
+		if (checked && needsInput) {
+			inputField.classList.remove('hidden');
+			inputField.focus();
+		} else {
+			inputField.classList.add('hidden');
+		}
+	}
+};
+
+// Update extra input value
+window.updateInputValue = (qId, optText, value) => {
+	// Store extra input with format "Option: value"
+	const key = `${qId}_extra`;
+	if (!state.answers[key]) state.answers[key] = {};
+	state.answers[key][optText] = value;
 };
 
 window.inputAnswer = (qId, val) => {
@@ -158,9 +221,22 @@ async function handleGenerateJd() {
 	// Collect all answers
 	const payload = [];
 	state.questions.forEach(q => {
-		// If query selector input is visible and has value, use it, else use state (from pills) or empty
-		const val = state.answers[q.id] || "无";
-		payload.push({ question_id: q.id, answer: val });
+		let val = state.answers[q.id];
+		// Convert array to comma-separated string
+		if (Array.isArray(val)) {
+			val = val.join(', ');
+		}
+		// Add extra input values if any
+		const extraKey = `${q.id}_extra`;
+		if (state.answers[extraKey]) {
+			const extras = Object.entries(state.answers[extraKey])
+				.filter(([k, v]) => v)
+				.map(([k, v]) => `${k}: ${v}`);
+			if (extras.length) {
+				val = val ? `${val}, ${extras.join(', ')}` : extras.join(', ');
+			}
+		}
+		payload.push({ question_id: q.id, answer: val || "无" });
 	});
 
 	const rawReq = document.getElementById('initial-req').value;
@@ -191,30 +267,46 @@ function renderJd(jd) {
 	state.jd = jd;
 	const container = document.getElementById('jd-display');
 	container.innerHTML = `
-        <div class="jd-field"><h2>${jd.title} <span style="font-size:0.6em; color:#888;">(${jd.work_location})</span></h2></div>
         <div class="jd-field">
-            <h3>薪资待遇</h3>
-            <p style="color: var(--success); font-weight: bold; font-size: 1.2rem;">
-                ${jd.salary.range} 
-                <span style="font-size:0.8rem; color:#888;">(${jd.salary.tax_type}${jd.salary.has_bonus ? ' + 绩效' : ''})</span>
-            </p>
-            ${jd.salary.description ? `<p style="font-size:0.9rem; color:#aaa;">${jd.salary.description}</p>` : ''}
+            <label style="color:#888; font-size:0.8rem;">职位名称</label>
+            <input type="text" id="jd-title" value="${jd.title}" class="jd-edit-input" 
+                style="font-size:1.5rem; font-weight:bold; width:100%;">
         </div>
         <div class="jd-field">
-            <h3>经验要求</h3>
-            <p>${jd.experience_level}</p>
+            <label style="color:#888; font-size:0.8rem;">薪资范围</label>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="jd-salary-range" value="${jd.salary.range}" class="jd-edit-input" style="flex:1;">
+                <select id="jd-salary-tax" class="jd-edit-input">
+                    <option value="税前" ${jd.salary.tax_type === '税前' ? 'selected' : ''}>税前</option>
+                    <option value="税后" ${jd.salary.tax_type === '税后' ? 'selected' : ''}>税后</option>
+                </select>
+                <label style="color:#888;"><input type="checkbox" id="jd-salary-bonus" ${jd.salary.has_bonus ? 'checked' : ''}> 含绩效</label>
+            </div>
         </div>
         <div class="jd-field">
-            <h3>核心职责</h3>
-            <ul style="padding-left: 20px;">
-                ${jd.key_responsibilities.map(r => `<li>${r.replace(/^[\s•\-\*]+/, '')}</li>`).join('')}
-            </ul>
+            <label style="color:#888; font-size:0.8rem;">经验要求</label>
+            <input type="text" id="jd-experience" value="${jd.experience_level}" class="jd-edit-input">
         </div>
         <div class="jd-field">
-            <h3>必备技能</h3>
-            <div class="tags">${jd.required_skills.map(s => `<span class="tag">${s}</span>`).join('')}</div>
+            <label style="color:#888; font-size:0.8rem;">核心职责（每行一条）</label>
+            <textarea id="jd-responsibilities" class="jd-edit-textarea" rows="4">${jd.key_responsibilities.join('\n')}</textarea>
+        </div>
+        <div class="jd-field">
+            <label style="color:#888; font-size:0.8rem;">必备技能（逗号分隔）</label>
+            <input type="text" id="jd-skills" value="${jd.required_skills.join(', ')}" class="jd-edit-input">
         </div>
     `;
+}
+
+// Save JD edits before confirmation
+function saveJdEdits() {
+	state.jd.title = document.getElementById('jd-title').value;
+	state.jd.salary.range = document.getElementById('jd-salary-range').value;
+	state.jd.salary.tax_type = document.getElementById('jd-salary-tax').value;
+	state.jd.salary.has_bonus = document.getElementById('jd-salary-bonus').checked;
+	state.jd.experience_level = document.getElementById('jd-experience').value;
+	state.jd.key_responsibilities = document.getElementById('jd-responsibilities').value.split('\n').filter(s => s.trim());
+	state.jd.required_skills = document.getElementById('jd-skills').value.split(',').map(s => s.trim()).filter(s => s);
 }
 
 // Step 3
@@ -336,8 +428,8 @@ window.generateAction = async (name, type) => {
 	const title = document.getElementById('modal-title');
 
 	modal.classList.remove('hidden');
-	body.innerText = "AI 正在生成内容...";
-	title.innerText = type === 'offer' ? '生成 Offer' : (type === 'interview' ? '面试邀请' : '拒信草稿');
+	body.innerHTML = "AI 正在生成内容...";
+	title.innerText = type === 'offer' ? '生成 Offer' : (type === 'interview' ? '面试邀请 + 面试题目' : '拒信草稿');
 
 	try {
 		const res = await fetch('/api/generate_action', {
@@ -350,8 +442,36 @@ window.generateAction = async (name, type) => {
 			})
 		});
 		const data = await res.json();
-		body.innerText = data.content;
+
+		let html = `<div class="email-content">${data.content.replace(/\n/g, '<br>')}</div>`;
+
+		// Show interview questions if available
+		if (data.interview_questions && data.interview_questions.length > 0) {
+			html += `
+				<div class="interview-questions" style="margin-top: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+					<h4 style="margin: 0 0 10px 0; color: var(--primary);">📝 面试题目 <button onclick="copyQuestions()" class="btn-secondary" style="font-size: 0.8rem; padding: 3px 8px; margin-left: 10px;">复制题目</button></h4>
+					<ol id="questions-list" style="padding-left: 20px; margin: 0;">
+						${data.interview_questions.map(q => `<li style="margin: 8px 0;">${q}</li>`).join('')}
+					</ol>
+				</div>
+			`;
+		}
+
+		body.innerHTML = html;
 	} catch (e) {
 		body.innerText = "生成失败，请重试";
+	}
+};
+
+// Copy interview questions to clipboard
+window.copyQuestions = () => {
+	const questionsList = document.getElementById('questions-list');
+	if (questionsList) {
+		const questions = Array.from(questionsList.querySelectorAll('li')).map((li, i) => `${i + 1}. ${li.textContent}`).join('\n');
+		navigator.clipboard.writeText(questions).then(() => {
+			alert('面试题目已复制到剪贴板！');
+		}).catch(err => {
+			console.error('Copy failed:', err);
+		});
 	}
 };
