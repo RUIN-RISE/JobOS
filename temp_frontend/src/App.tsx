@@ -3,7 +3,6 @@ import {
   Terminal,
   UploadCloud,
   XCircle,
-  ChevronRight,
   ChevronDown,
   Mail,
   ArrowRight,
@@ -20,7 +19,6 @@ import {
   Vote,
   Target,
   ChevronLeft,
-  MessageSquare,
   FileText,
   User,
   Terminal as BotIcon
@@ -29,7 +27,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from './api';
-import type { ChatMessage, CandidateRank, Resume } from './api';
+import type { ChatMessage, CandidateRank } from './api';
 
 // --- UTILS ---
 function cn(...inputs: ClassValue[]) {
@@ -180,7 +178,6 @@ export default function JobOSCmdDeck() {
           {step === 'DEPLOYED' && (
             <motion.div key="execution" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -50 }} className="flex-1 overflow-hidden">
               <ExecutionDashboard
-                jd={jdData}
                 onStartInterview={handleStartInterviewFlow}
                 // Lifted Props
                 phase={dashboardPhase}
@@ -545,7 +542,6 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
 
 // --- 3. EXECUTION DASHBOARD ---
 interface DashboardProps {
-  jd: StructuredJD;
   onStartInterview: (c: CandidateRank) => void;
   // Lifted Props
   phase: 'INGEST' | 'PROCESSING' | 'RESULTS';
@@ -559,7 +555,6 @@ interface DashboardProps {
 }
 
 function ExecutionDashboard({
-  jd,
   onStartInterview,
   phase, setPhase,
   files: uploadedFiles, setFiles: setUploadedFiles,
@@ -815,55 +810,27 @@ function InterviewPanel({ candidates }: { candidates: CandidateRank[] }) {
   );
 }
 
-// --- SUB-COMPONENTS ---
-function Label({ icon, text }: { icon: React.ReactNode, text: string }) {
-  return <label className="flex items-center gap-3 text-xs font-black tracking-[0.2em] text-zinc-500 uppercase">{icon} {text}</label>;
+// --- UTILS COMPONENTS & HELPERS ---
+function MagneticButton({ children, className, ...props }: any) {
+  return <button className={className} {...props}>{children}</button>;
 }
 
-function SpotlightCard({ children, className = "", onClick }: { children: React.ReactNode; className?: string, onClick?: () => void }) {
-  const divRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [opacity, setOpacity] = useState(0);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!divRef.current) return;
-    const rect = divRef.current.getBoundingClientRect();
-    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
-
-  return (
-    <div ref={divRef} onMouseMove={handleMouseMove} onMouseEnter={() => setOpacity(1)} onMouseLeave={() => setOpacity(0)} onClick={onClick} className={cn("relative overflow-hidden bg-white/[0.03] border border-white/5 transition-all duration-300", className)}>
-      <div className="pointer-events-none absolute -inset-px transition duration-300 opacity-0 group-hover:opacity-100" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(99,102,241,0.15), transparent 40%)` }} />
-      {children}
-    </div>
-  );
+function SpotlightCard({ children, className = "" }: { children: React.ReactNode, className?: string }) {
+  return <div className={`relative overflow-hidden ${className}`}>{children}</div>;
 }
 
-function MagneticButton({ children, className, onClick, type = "button", disabled = false }: any) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!ref.current) return;
-    const { clientX, clientY } = e;
-    const { height, width, left, top } = ref.current.getBoundingClientRect();
-    setPosition({ x: (clientX - (left + width / 2)) * 0.15, y: (clientY - (top + height / 2)) * 0.15 });
-  };
-  return (
-    <motion.button ref={ref} onMouseMove={handleMouseMove} onMouseLeave={() => setPosition({ x: 0, y: 0 })} animate={{ x: position.x, y: position.y }} transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }} onClick={onClick} className={className} type={type} disabled={disabled}>
-      {children}
-    </motion.button>
-  );
+function Label({ icon, text }: { icon: any, text: string }) {
+  return <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">{icon}{text}</div>;
 }
 
-function StatCard({ label, value, icon, highlight = false }: any) {
+function StatCard({ label, value, icon, highlight = false }: { label: string, value: string, icon: any, highlight?: boolean }) {
   return (
-    <div className={cn("bg-white/[0.02] border border-white/5 p-6 rounded-2xl flex flex-col gap-4 relative overflow-hidden group", highlight && "bg-indigo-900/10 border-indigo-500/20")}>
-      {highlight && <div className="absolute inset-0 bg-indigo-500/10 blur-xl group-hover:bg-indigo-500/20 transition-colors"></div>}
-      <div className="flex justify-between items-start relative z-10">
-        <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">{label}</span>
-        {icon}
+    <div className={cn("p-6 rounded-2xl border flex items-center gap-4 transition-all hover:scale-105", highlight ? "bg-white/10 border-white/20" : "bg-white/5 border-white/5")}>
+      <div className="w-12 h-12 rounded-xl bg-black/40 flex items-center justify-center">{icon}</div>
+      <div>
+        <div className="text-xs text-zinc-500 font-bold uppercase tracking-wider">{label}</div>
+        <div className="text-2xl font-black text-white mt-1">{value}</div>
       </div>
-      <div className={cn("text-4xl font-black tracking-tighter relative z-10", highlight ? "text-indigo-100" : "text-white")}>{value}</div>
     </div>
   );
 }
