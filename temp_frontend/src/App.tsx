@@ -72,6 +72,7 @@ export default function JobOSCmdDeck() {
   const [dashboardFiles, setDashboardFiles] = useState<File[]>([]);
   const [dashboardLogs, setDashboardLogs] = useState<string[]>([]);
   const [dashboardCandidates, setDashboardCandidates] = useState<CandidateRank[]>([]);
+  const [dashboardProcessedCount, setDashboardProcessedCount] = useState<number>(0);
 
   // Global Motion: Mouse Tracking
   useEffect(() => {
@@ -188,6 +189,8 @@ export default function JobOSCmdDeck() {
                 setLogs={setDashboardLogs}
                 candidates={dashboardCandidates}
                 setCandidates={setDashboardCandidates}
+                processedCount={dashboardProcessedCount}
+                setProcessedCount={setDashboardProcessedCount}
               />
             </motion.div>
           )}
@@ -552,6 +555,8 @@ interface DashboardProps {
   setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   candidates: CandidateRank[];
   setCandidates: React.Dispatch<React.SetStateAction<CandidateRank[]>>;
+  processedCount: number;
+  setProcessedCount: React.Dispatch<React.SetStateAction<number>>;
 }
 
 function ExecutionDashboard({
@@ -559,13 +564,14 @@ function ExecutionDashboard({
   phase, setPhase,
   files: uploadedFiles, setFiles: setUploadedFiles,
   logs, setLogs,
-  candidates, setCandidates
+  candidates, setCandidates,
+  processedCount, setProcessedCount
 }: DashboardProps) {
   // Local UI state
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [processedCount, setProcessedCount] = useState<number>(0); // Track actual resumes
+  // processedCount is now a prop
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
