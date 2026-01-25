@@ -19,7 +19,7 @@ JobOS is an intelligent recruitment agent designed to streamline the hiring proc
 ## Tech Stack
 - **Frontend**: React + Vite + TailwindCSS
 - **Backend**: FastAPI + Python
-- **AI**: Multi-model support (MiniMax, Qwen, etc.) via ModelScope/OpenAI API.
+- **AI**: Multi-model support (GLM,DeepSeek, Qwen, etc.) via ModelScope/OpenAI API.
 
 ## Deployment
 This project is configured for ModelScope Spaces using Docker.
