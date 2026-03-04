@@ -73,13 +73,25 @@ class HistoryRecord(BaseModel):
 @app.post("/api/cloud/auth/login")
 async def cloud_login(req: LoginRequest):
     import time
+    import json
     
-    # 验证内置的内测码池，若不存在，如果用户是在部署阶段执行过 generate_invites 则能找得到。
-    # 为了简化跨服务器部署，如果未发现邀请名单，我们可以使用内置正则校验，例如必须是 JOBOS- 开头且格式相符
-    if not req.invite_code.startswith("JOBOS-"):
+    # 尝试读取真实的内测邀请名单
+    invites_path = os.path.join(os.path.dirname(BASE_DIR), "invites.json")
+    if not os.path.exists(invites_path):
+        invites_path = os.path.join(BASE_DIR, "invites.json")
+        
+    try:
+        with open(invites_path, "r", encoding="utf-8") as f:
+            invites_map = json.load(f)
+    except Exception as e:
+        print(f"Failed to load invites on cloud: {e}")
+        invites_map = {"ADMIN-TEST-CODE": "test_admin"}
+        
+    code = req.invite_code.strip()
+    if code not in invites_map:
         raise HTTPException(status_code=401, detail="无效的内测邀请码。")
         
-    account_name = f"user_{req.invite_code[-4:]}"
+    account_name = invites_map[code]
     current_time = time.time()
     
     if account_name in ACTIVE_SESSIONS:

@@ -563,12 +563,12 @@ function LandingPage({ onStart, isLogged, onSkipToDashboard }: { onStart: (role:
               开始筛选
               <ArrowRight className="w-5 h-5" />
             </MagneticButton>
-            {isLogged && (
-              <button type="button" onClick={onSkipToDashboard} className="px-8 h-20 rounded-2xl border border-indigo-500/30 text-indigo-300 bg-black/40 hover:bg-indigo-500/10 transition-colors text-lg font-bold flex items-center justify-center whitespace-nowrap backdrop-blur-md hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-                直接进入简历库
-              </button>
-            )}
           </div>
+          {isLogged && (
+            <button type="button" onClick={onSkipToDashboard} className="absolute right-0 translate-x-[calc(100%+1.5rem)] px-8 h-20 rounded-2xl border border-indigo-500/30 text-indigo-300 bg-black/40 hover:bg-indigo-500/10 transition-colors text-lg font-bold flex items-center justify-center whitespace-nowrap backdrop-blur-md hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+              直接进入简历库
+            </button>
+          )}
         </form>
       </div>
     </div>
