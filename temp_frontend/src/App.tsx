@@ -282,7 +282,7 @@ export default function JobOSCmdDeck() {
             </button>
           )}
           <div className="flex items-center gap-3 select-none pointer-events-none">
-            <img src="/logo_w.png" alt="JobOS Logo" className="h-8 object-contain" />
+            <img src="./logo_w.png" alt="JobOS Logo" className="h-8 object-contain" />
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -564,12 +564,16 @@ function LandingPage({ onStart, isLogged, onSkipToDashboard }: { onStart: (role:
               <ArrowRight className="w-5 h-5" />
             </MagneticButton>
           </div>
-          {isLogged && (
-            <button type="button" onClick={onSkipToDashboard} className="absolute right-0 translate-x-[calc(100%+1.5rem)] px-8 h-20 rounded-2xl border border-indigo-500/30 text-indigo-300 bg-black/40 hover:bg-indigo-500/10 transition-colors text-lg font-bold flex items-center justify-center whitespace-nowrap backdrop-blur-md hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+        </form>
+
+        {/* Secondary Action: Skip to Dashboard */}
+        {isLogged && (
+          <div className="mt-8 flex justify-center">
+            <button type="button" onClick={onSkipToDashboard} className="px-10 py-4 rounded-xl border border-indigo-500/30 text-indigo-300 bg-black/40 hover:bg-indigo-500/10 transition-all text-sm font-bold flex items-center justify-center whitespace-nowrap backdrop-blur-md hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
               直接进入简历库
             </button>
-          )}
-        </form>
+          </div>
+        )}
       </div>
     </div>
   );
