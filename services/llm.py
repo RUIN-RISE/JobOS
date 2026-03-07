@@ -385,6 +385,7 @@ def generate_jd(answers: Dict[str, str], raw_req: str = "") -> JobDefinition:
     特别重要：
     1. 提取"薪资"信息到 `salary` 对象。
     2. "工作地点" (`work_location`) **必须默认为 "杭州"** (除非用户强行指定其他城市，否则一律填 "杭州")。
+    3. 严格区分 "加分项" (`bonus_skills`) 和 "软技能/团队文化" (`culture_fit`)，不要将具体技能证书等误入软技能中，切勿合并。
     
     输出格式示例：
     {{
@@ -392,6 +393,7 @@ def generate_jd(answers: Dict[str, str], raw_req: str = "") -> JobDefinition:
         "key_responsibilities": ["负责后端API开发", "优化数据库性能"],
         "required_skills": ["Python", "FastAPI", "MySQL"],
         "experience_level": "3-5年",
+        "education": "本科",
         "salary": {{
             "range": "25k-35k",
             "tax_type": "税前",
@@ -399,7 +401,8 @@ def generate_jd(answers: Dict[str, str], raw_req: str = "") -> JobDefinition:
             "description": "14薪"
         }},
         "work_location": "杭州",
-        "bonus_skills": ["Docker", "K8s"]
+        "bonus_skills": ["Docker", "K8s"],
+        "culture_fit": ["抗压能力强", "极客精神"]
     }}
     """
     conn = _call_llm([
@@ -410,7 +413,7 @@ def generate_jd(answers: Dict[str, str], raw_req: str = "") -> JobDefinition:
         data = json.loads(conn)
         return JobDefinition(**data)
     except:
-        return JobDefinition(title="生成失败", key_responsibilities=[], required_skills=[], experience_level="", bonus_skills=[])
+        return JobDefinition(title="生成失败", key_responsibilities=[], required_skills=[], experience_level="", education="未指定", bonus_skills=[], culture_fit=[])
 
 
 def _parse_resume_fields(content: str) -> Dict:

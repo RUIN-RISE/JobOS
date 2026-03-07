@@ -37,7 +37,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import logoW from './assets/logo_w.png';
 // --- API CLIENT ---
 import api from './api';
-import type { ChatMessage, CandidateRank } from './api';
+import type { ChatMessage, CandidateRank, JobDefinition } from './api';
 
 // --- UTILS ---
 function cn(...inputs: ClassValue[]) {
@@ -45,24 +45,18 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // --- TYPES ---
-interface StructuredJD {
-  role: string | null;
-  stack: string[];
-  exp_level: string;
-  culture_fit: string[];
-  education: string;
-  plus_points: string[];
-  remarks: string;
-}
 
-const INITIAL_JD: StructuredJD = {
-  role: null,
-  stack: [],
-  exp_level: "未指定",
-  culture_fit: [],
+
+const INITIAL_JD: JobDefinition = {
+  title: "",
+  key_responsibilities: [],
+  required_skills: [],
+  experience_level: "未指定",
   education: "未指定",
-  plus_points: [],
-  remarks: ""
+  bonus_skills: [],
+  culture_fit: [],
+  work_location: "杭州",
+  salary: { range: "面议", tax_type: "税前", has_bonus: false, description: "" }
 };
 
 const START_SUGGESTIONS = [
@@ -74,7 +68,7 @@ const START_SUGGESTIONS = [
 // --- APP COMPONENT ---
 export default function JobOSCmdDeck() {
   const [step, setStep] = useState<'IDLE' | 'BRIEFING' | 'JD_REVIEW' | 'DEPLOYED' | 'INTERVIEW_PREP'>('IDLE');
-  const [jdData, setJdData] = useState<StructuredJD>(INITIAL_JD);
+  const [jdData, setJdData] = useState<JobDefinition>(INITIAL_JD);
   const [shortlistedCandidates, setShortlistedCandidates] = useState<CandidateRank[]>([]);
 
   // Lifted Dashboard State
@@ -143,10 +137,17 @@ export default function JobOSCmdDeck() {
   const loadHistory = async () => {
     try {
       const hist = await api.getAccountHistory();
-      const parsedHist = hist.map((r: any) => ({
-        ...r,
-        content: typeof r.content === 'string' ? JSON.parse(r.content) : r.content
-      }));
+      const parsedHist = hist.reduce((acc: any[], r: any) => {
+        try {
+          acc.push({
+            ...r,
+            content: typeof r.content === 'string' ? JSON.parse(r.content) : r.content
+          });
+        } catch (err) {
+          console.warn('Skipping corrupted history record:', r.id);
+        }
+        return acc;
+      }, []);
       setAccountHistory(parsedHist);
     } catch (e) {
       console.error(e);
@@ -180,29 +181,28 @@ export default function JobOSCmdDeck() {
       return;
     }
 
-    const finalJd: StructuredJD = {
-      role: rawJd.title || rawJd.role || "",
-      stack: rawJd.required_skills || rawJd.stack || [],
-      exp_level: rawJd.experience_level || rawJd.exp_level || "未指定",
+    const finalJd: JobDefinition = {
+      title: rawJd.title || rawJd.role || "",
+      key_responsibilities: rawJd.key_responsibilities || [],
+      required_skills: rawJd.required_skills || rawJd.stack || [],
+      experience_level: rawJd.experience_level || rawJd.exp_level || "未指定",
       culture_fit: rawJd.culture_fit || [],
       education: rawJd.education || "未指定",
-      plus_points: rawJd.bonus_skills || rawJd.plus_points || [],
-      remarks: rawJd.salary ? (rawJd.salary.range ? `${rawJd.salary.range} (${rawJd.salary.tax_type || '税前'})` : (rawJd.salary.description || "面议")) : (rawJd.remarks || "")
+      bonus_skills: rawJd.bonus_skills || rawJd.plus_points || [],
+      salary: {
+        range: rawJd.salary?.range || "面议",
+        tax_type: rawJd.salary?.tax_type || "税前",
+        has_bonus: rawJd.salary?.has_bonus || false,
+        description: rawJd.salary?.description || rawJd.remarks || ""
+      },
+      work_location: rawJd.work_location || "杭州"
     };
 
     setJdData(finalJd);
 
     // 强制同步后台 Session
     try {
-      await api.setCurrentJd({
-        title: finalJd.role || "未命名职位",
-        key_responsibilities: [],
-        required_skills: finalJd.stack || [],
-        experience_level: finalJd.exp_level || "未指定",
-        salary: { range: "", tax_type: "税前", has_bonus: false, description: finalJd.remarks },
-        work_location: "不限",
-        bonus_skills: finalJd.plus_points || []
-      } as any);
+      await api.setCurrentJd(finalJd);
     } catch (e) { console.error("Sync JD error", e); }
 
     // 智能路由跳转
@@ -228,28 +228,20 @@ export default function JobOSCmdDeck() {
 
   // Handlers
   const handleStart = (roleName: string) => {
-    setJdData(prev => ({ ...prev, role: roleName }));
+    setJdData(prev => ({ ...prev, title: roleName }));
     setStep('BRIEFING');
   };
 
-  const handleBriefComplete = (finalJd: StructuredJD) => {
+  const handleBriefComplete = (finalJd: JobDefinition) => {
     setJdData(finalJd);
     setStep('JD_REVIEW');
   };
 
-  const handleJdConfirmed = async (confirmedJd: StructuredJD) => {
+  const handleJdConfirmed = async (confirmedJd: JobDefinition) => {
     setJdData(confirmedJd);
 
     try {
-      await api.setCurrentJd({
-        title: confirmedJd.role || "未命名职位",
-        key_responsibilities: [],
-        required_skills: confirmedJd.stack || [],
-        experience_level: confirmedJd.exp_level || "未指定",
-        salary: { range: "", tax_type: "税前", has_bonus: false, description: confirmedJd.remarks },
-        work_location: "不限",
-        bonus_skills: confirmedJd.plus_points || []
-      });
+      await api.setCurrentJd(confirmedJd);
     } catch (e) { console.error("Sync JD error", e); }
 
     setStep('DEPLOYED');
@@ -413,8 +405,18 @@ export default function JobOSCmdDeck() {
                             </button>
                           </div>
                         </div>
-                        <div className="text-sm text-zinc-300 font-medium line-clamp-2 cursor-pointer" onClick={() => handleLoadHistoryRecord(rec)}>
-                          {rec?.record_type === 'jd' ? (rec?.content?.role || rec?.content?.title || "未命名职位") : rec?.record_type === 'workspace' ? `工作区: ${rec?.content?.jd_data?.role || rec?.content?.jd_data?.title || '未命名'}` : `${rec?.content?.content?.substring(0, 30) || '...'}...`}
+                        <div className="text-sm text-zinc-300 font-medium line-clamp-2 cursor-pointer group-hover:text-indigo-300 transition-colors" onClick={() => handleLoadHistoryRecord(rec)}>
+                          {rec?.record_type === 'jd' ?
+                            (rec?.content?.title || rec?.content?.role || "未命名职位") :
+                            rec?.record_type === 'workspace' ?
+                              <div className="flex flex-col gap-1">
+                                <span>工作区: {rec?.content?.jd_data?.title || rec?.content?.jd_data?.role || '未命名'}</span>
+                                <span className="text-xs text-zinc-500">
+                                  包含 {rec?.content?.candidates?.length || 0} 份简历解析记录
+                                </span>
+                              </div> :
+                              `${rec?.content?.content?.substring(0, 30) || '...'}...`
+                          }
                         </div>
                       </div>
                     ))
@@ -437,7 +439,7 @@ export default function JobOSCmdDeck() {
           )}
           {step === 'BRIEFING' && (
             <motion.div key="briefing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="flex-1 flex flex-col items-center justify-center p-2 w-full h-full">
-              <SpecConfigurator initialUserInput={jdData.role || ''} onComplete={handleBriefComplete} />
+              <SpecConfigurator initialUserInput={jdData.title || ''} onComplete={handleBriefComplete} />
             </motion.div>
           )}
           {step === 'JD_REVIEW' && (
@@ -475,10 +477,14 @@ export default function JobOSCmdDeck() {
   );
 }
 // --- 2.5 JD REVIEW PANEL ---
-function JdReviewPanel({ jd, onConfirm }: { jd: StructuredJD, onConfirm: (jd: StructuredJD) => void }) {
+function JdReviewPanel({ jd, onConfirm }: { jd: JobDefinition, onConfirm: (jd: JobDefinition) => void }) {
   const [editedJd, setEditedJd] = useState(jd);
 
-  const handleChange = (field: keyof StructuredJD, value: any) => {
+  useEffect(() => {
+    setEditedJd(jd);
+  }, [jd]);
+
+  const handleChange = (field: keyof JobDefinition, value: any) => {
     setEditedJd(prev => ({ ...prev, [field]: value }));
   };
 
@@ -504,27 +510,33 @@ function JdReviewPanel({ jd, onConfirm }: { jd: StructuredJD, onConfirm: (jd: St
         <div className="grid grid-cols-2 gap-6">
           <div className="space-y-2">
             <Label icon={<User className="w-4 h-4" />} text="职位名称" />
-            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.role || ''} onChange={e => handleChange('role', e.target.value)} />
+            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.title || ''} onChange={e => handleChange('title', e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label icon={<Activity className="w-4 h-4" />} text="经验要求" />
-            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.exp_level} onChange={e => handleChange('exp_level', e.target.value)} />
+            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.experience_level} onChange={e => handleChange('experience_level', e.target.value)} />
           </div>
           <div className="col-span-2 space-y-2">
             <Label icon={<Code2 className="w-4 h-4" />} text="核心技能 (逗号分隔)" />
-            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={(editedJd.stack || []).join(', ')} onChange={e => handleChange('stack', e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean))} />
+            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={(editedJd.required_skills || []).join(', ')} onChange={e => handleChange('required_skills', e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean))} />
           </div>
           <div className="col-span-2 space-y-2">
             <Label icon={<Target className="w-4 h-4" />} text="加分项 (逗号分隔)" />
-            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={(editedJd.plus_points || []).join(', ')} onChange={e => handleChange('plus_points', e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean))} />
+            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={(editedJd.bonus_skills || []).join(', ')} onChange={e => handleChange('bonus_skills', e.target.value.split(/[,，]/).map(s => s.trim()).filter(Boolean))} />
           </div>
           <div className="space-y-2">
             <Label icon={<ShieldCheck className="w-4 h-4" />} text="学历要求" />
             <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.education || ''} onChange={e => handleChange('education', e.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label icon={<Activity className="w-4 h-4" />} text="薪资待遇" />
-            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.remarks || ''} onChange={e => handleChange('remarks', e.target.value)} />
+          <div className="col-span-2 grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label icon={<Activity className="w-4 h-4" />} text="薪资范围" />
+              <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.salary?.range || ''} onChange={e => handleChange('salary', { ...(editedJd.salary || {}), range: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label icon={<Activity className="w-4 h-4" />} text="补充说明" />
+              <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none transition-colors" value={editedJd.salary?.description || ''} onChange={e => handleChange('salary', { ...(editedJd.salary || {}), description: e.target.value })} />
+            </div>
           </div>
           <div className="space-y-2">
             <Label icon={<Vote className="w-4 h-4" />} text="软技能" />
@@ -540,7 +552,7 @@ function JdReviewPanel({ jd, onConfirm }: { jd: StructuredJD, onConfirm: (jd: St
   );
 }
 
-function JdMarkdownExport({ jd }: { jd: StructuredJD }) {
+function JdMarkdownExport({ jd }: { jd: JobDefinition }) {
   const [loading, setLoading] = useState(false);
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -551,15 +563,7 @@ function JdMarkdownExport({ jd }: { jd: StructuredJD }) {
     setError(null);
     try {
       // 先把当前 JD 同步到后端 session
-      await api.setCurrentJd({
-        title: jd.role || '未命名职位',
-        key_responsibilities: [],
-        required_skills: jd.stack || [],
-        experience_level: jd.exp_level || '',
-        salary: { range: jd.remarks || '', tax_type: '税前', has_bonus: false, description: jd.remarks || '' },
-        work_location: '不限',
-        bonus_skills: jd.plus_points || []
-      });
+      await api.setCurrentJd(jd);
       const res = await api.generateJdMarkdown();
       setMarkdown(res.markdown);
     } catch (e: any) {
@@ -707,10 +711,10 @@ function LandingPage({ onStart, isLogged, onSkipToDashboard }: { onStart: (role:
 }
 
 // --- 2. SPEC CONFIGURATOR: CHAT TO JD ---
-function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: string, onComplete: (jd: StructuredJD) => void }) {
+function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: string, onComplete: (jd: JobDefinition) => void }) {
   // Fix: remarks should be empty for Salary, not the initial prompt.
   // We use a separate state 'requestContext' to keep the original prompt for JD generation.
-  const [formData, setFormData] = useState<StructuredJD>({ ...INITIAL_JD, role: initialUserInput, remarks: "" });
+  const [formData, setFormData] = useState<JobDefinition>({ ...INITIAL_JD, title: initialUserInput });
   const [requestContext] = useState(initialUserInput);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -768,16 +772,19 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
 
     setFormData(prev => ({
       ...prev,
-      role: info.role || prev.role,
-      stack: info.core_skills ? toArray(info.core_skills) : prev.stack,
-      exp_level: info.exp_years || prev.exp_level,
+      title: info.title || prev.title,
+      required_skills: info.core_skills ? toArray(info.core_skills) : prev.required_skills,
+      experience_level: info.exp_years || prev.experience_level,
       // Map 'soft_skills' or 'culture_fit' from backend to frontend 'culture_fit'
       culture_fit: (info.soft_skills || info.culture_fit) ? toArray(info.soft_skills || info.culture_fit) : prev.culture_fit,
       education: info.education || prev.education,
       // Map 'bonus' or 'plus_points' from backend to frontend 'plus_points'
-      plus_points: (info.bonus || info.plus_points) ? toArray(info.bonus || info.plus_points) : prev.plus_points,
-      // Map 'salary' from backend to frontend 'remarks'
-      remarks: info.salary || prev.remarks
+      bonus_skills: (info.bonus || info.bonus_skills) ? toArray(info.bonus || info.bonus_skills) : prev.bonus_skills,
+      // Map 'salary' from backend to frontend 'salary.description'
+      salary: {
+        ...(prev.salary || {}),
+        description: info.salary || prev.salary?.description || "面议"
+      }
     }));
   };
 
@@ -814,27 +821,29 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
     setIsAiThinking(true);
     // Prepare answers for generate_jd
     const answers = [
-      { question_id: 'role', answer: formData.role || "" },
-      { question_id: 'stack', answer: formData.stack.join(',') },
-      { question_id: 'exp', answer: formData.exp_level },
+      { question_id: 'role', answer: formData.title || "" },
+      { question_id: 'stack', answer: formData.required_skills.join(',') },
+      { question_id: 'exp', answer: formData.experience_level || "" },
       { question_id: 'soft', answer: formData.culture_fit.join(',') },
-      { question_id: 'edu', answer: formData.education },
-      { question_id: 'bonus', answer: formData.plus_points.join(',') },
-      { question_id: 'salary', answer: formData.remarks }
+      { question_id: 'edu', answer: formData.education || "" },
+      { question_id: 'bonus', answer: formData.bonus_skills.join(',') },
+      { question_id: 'salary', answer: [formData.salary?.range, formData.salary?.description].filter(Boolean).join(' ') || "" }
     ];
 
     try {
       // Use requestContext (original prompt) as the raw requirement base
       const jd = await api.generateJd(answers, requestContext);
       // Map backend JD to frontend structure
-      const finalJd: StructuredJD = {
-        role: jd.title,
-        stack: jd.required_skills,
-        exp_level: jd.experience_level,
-        culture_fit: formData.culture_fit, // Keep chat gathered soft skills
-        education: formData.education,
-        plus_points: jd.bonus_skills,
-        remarks: jd.salary?.range ? `${jd.salary.range} (${jd.salary.tax_type || '税前'})` : (jd.salary?.description || "面议")
+      const finalJd: JobDefinition = {
+        title: jd.title,
+        key_responsibilities: jd.key_responsibilities,
+        required_skills: jd.required_skills,
+        experience_level: jd.experience_level,
+        culture_fit: (jd.culture_fit && jd.culture_fit.length > 0) ? jd.culture_fit : formData.culture_fit,
+        education: jd.education && jd.education !== "未指定" ? jd.education : formData.education,
+        bonus_skills: (jd.bonus_skills && jd.bonus_skills.length > 0) ? jd.bonus_skills : formData.bonus_skills,
+        work_location: jd.work_location,
+        salary: jd.salary
       };
       onComplete(finalJd);
     } catch (e) {
@@ -908,17 +917,17 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
               <div className="space-y-8">
                 <div className="space-y-2">
                   <span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">目标岗位</span>
-                  <span className="text-white block bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-base font-bold shadow-sm">{formData.role || '—'}</span>
+                  <span className="text-white block bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-base font-bold shadow-sm">{formData.title || '—'}</span>
                 </div>
                 <div className="space-y-2">
                   <span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">核心技能</span>
-                  <div className="flex flex-wrap gap-2">{formData.stack.length > 0 ? formData.stack.map(s => <span key={s} className="text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20 text-xs font-bold shadow-[0_0_10px_rgba(99,102,241,0.1)]">{s}</span>) : <span className="text-zinc-700 italic"> 等待输入...</span>}</div>
+                  <div className="flex flex-wrap gap-2">{formData.required_skills.length > 0 ? formData.required_skills.map(s => <span key={s} className="text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20 text-xs font-bold shadow-[0_0_10px_rgba(99,102,241,0.1)]">{s}</span>) : <span className="text-zinc-700 italic"> 等待输入...</span>}</div>
                 </div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">经验要求</span><span className={cn("block text-base font-medium", formData.exp_level !== '未指定' ? "text-emerald-400" : "text-zinc-500")}>{formData.exp_level}</span></div>
+                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">经验要求</span><span className={cn("block text-base font-medium", formData.experience_level !== '未指定' ? "text-emerald-400" : "text-zinc-500")}>{formData.experience_level}</span></div>
                 <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">学历要求</span><span className={cn("block text-base font-medium", formData.education !== '未指定' ? "text-emerald-400" : "text-zinc-500")}>{formData.education}</span></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">薪资待遇</span><span className={cn("block text-base font-medium", formData.remarks && formData.remarks !== formData.role ? "text-emerald-400" : "text-zinc-500")}>{formData.remarks === formData.role ? "等待输入..." : formData.remarks}</span></div>
+                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">薪资待遇</span><span className={cn("block text-base font-medium", formData.salary.description && formData.salary.description !== formData.title ? "text-emerald-400" : "text-zinc-500")}>{formData.salary.description === formData.title ? "等待输入..." : formData.salary.description}</span></div>
                 <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">软技能</span><div className="flex flex-wrap gap-2">{formData.culture_fit.length > 0 ? formData.culture_fit.map(s => <span key={s} className="text-purple-300 bg-purple-500/10 px-2 py-1 rounded-md border border-purple-500/20 text-xs">{s}</span>) : <span className="text-zinc-700 italic">...</span>}</div></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">加分项</span><div className="flex flex-wrap gap-2">{formData.plus_points.length > 0 ? formData.plus_points.map(s => <span key={s} className="text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 text-xs">{s}</span>) : <span className="text-zinc-700 italic">...</span>}</div></div>
+                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">加分项</span><div className="flex flex-wrap gap-2">{formData.bonus_skills.length > 0 ? formData.bonus_skills.map(s => <span key={s} className="text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 text-xs">{s}</span>) : <span className="text-zinc-700 italic">...</span>}</div></div>
               </div>
             </div>
           </div>
@@ -940,7 +949,7 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
 // --- 3. EXECUTION DASHBOARD ---
 interface DashboardProps {
   onStartInterview: (c: CandidateRank) => void;
-  jdData: StructuredJD;
+  jdData: JobDefinition;
   // Lifted Props
   phase: 'INGEST' | 'PROCESSING' | 'RESULTS';
   setPhase: (p: 'INGEST' | 'PROCESSING' | 'RESULTS') => void;
@@ -976,10 +985,15 @@ function ExecutionDashboard({
     if (files.length > 0) setUploadedFiles(prev => [...prev, ...files].slice(0, 50));
   };
 
-  const startProcessing = async () => {
-    if (uploadedFiles.length === 0) return;
+  const [cloudSource, setCloudSource] = useState<'public' | { type: 'private', filename: string } | null>(null);
 
-    // Fake upload progress
+  const startProcessing = async () => {
+    if (uploadedFiles.length === 0 && !cloudSource) return;
+    if (!jdData || !jdData.title) {
+      alert("请先创建新需求或从右上角载入一份生效的历史职位描述 (JD)，再启动简历分析匹配！");
+      return;
+    }
+
     setUploadProgress(0);
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => Math.min(prev + 10, 90));
@@ -987,14 +1001,36 @@ function ExecutionDashboard({
 
     try {
       setPhase('PROCESSING');
-      setLogs(prev => [...prev, "[INFO] 上传简历中..."]);
 
-      // 1. Upload Resumes
-      const resultResumes = await api.uploadMultipleResumes(uploadedFiles);
+      // Step 1: Sync JD
+      try {
+        await api.setCurrentJd(jdData);
+      } catch (err) {
+        console.warn("Could not sync JD data to backend", err);
+      }
+
+      // Step 2: Ingest
+      let resultResumes = [];
+      if (uploadedFiles.length > 0) {
+        setLogs(prev => [...prev, "[INFO] 本地上传简历中..."]);
+        resultResumes = await api.uploadMultipleResumes(uploadedFiles);
+        if (resultResumes.length === 0 && uploadedFiles.length > 0) {
+          throw new Error("无可用且解析成功的简历。");
+        } else if (resultResumes.length < uploadedFiles.length) {
+          setLogs(prev => [...prev, `[WARNING] 部分简历失败。仅成功 ${resultResumes.length} 份。`]);
+        }
+      } else if (cloudSource === 'public') {
+        setLogs(prev => [...prev, "[INFO] 从云端拉取公有简历集..."]);
+        resultResumes = await api.fetchPublicResumes();
+      } else if (cloudSource?.type === 'private') {
+        setLogs(prev => [...prev, `[INFO] 从云端拉取私有库包: ${cloudSource.filename}...`]);
+        resultResumes = await api.fetchPrivateResumes(cloudSource.filename);
+      }
+
       setProcessedCount(resultResumes.length);
-      setLogs(prev => [...prev, `[SUCCESS] 简历上传完成，共解析 ${resultResumes.length} 份简历...`]);
+      setLogs(prev => [...prev, `[SUCCESS] 简历准备完成，共就绪 ${resultResumes.length} 份...`]);
 
-      // 2. Analyze
+      // Step 3: Analyze
       setLogs(prev => [...prev, "[ANALYSIS] 正在进行多维能力画像匹配... (可能需要1-2分钟)"]);
       setUploadProgress(100);
       clearInterval(progressInterval);
@@ -1002,12 +1038,10 @@ function ExecutionDashboard({
       const ranks = await api.analyzeResumes();
       setLogs(prev => [...prev, `[RESULT] 完成分析，发现 ${ranks.length} 位高潜力候选人。`]);
 
-      // Wait a bit for effect
       setTimeout(() => {
         setCandidates(ranks);
         setPhase('RESULTS');
       }, 1000);
-
     } catch (e) {
       clearInterval(progressInterval);
       setLogs(prev => [...prev, `[ERROR] 处理失败: ${e}`]);
@@ -1016,52 +1050,16 @@ function ExecutionDashboard({
     }
   };
 
-  const handleCloudSource = async (type: 'public' | 'private') => {
-    try {
-      setPhase('PROCESSING');
-      setLogs(prev => [...prev, "[INFO] 从云端拉取简历数据..."]);
-
-      try {
-        await api.setCurrentJd({
-          title: jdData.role || "通用岗位",
-          key_responsibilities: [],
-          required_skills: jdData.stack || [],
-          experience_level: jdData.exp_level || "未指定",
-          salary: { range: "", tax_type: "税前", has_bonus: false, description: jdData.remarks || "" },
-          work_location: "不限",
-          bonus_skills: jdData.plus_points || []
-        } as any);
-      } catch (err) {
-        console.warn("Could not sync JD data to backend", err);
+  const handleSelectCloudSource = (type: 'public' | 'private') => {
+    if (type === 'public') {
+      setCloudSource('public');
+      setUploadedFiles([]);
+    } else {
+      const val = prompt("请输入您存放在云端的私有简历包的文件名 (例如: my_resumes.zip):");
+      if (val) {
+        setCloudSource({ type: 'private', filename: val.trim() });
+        setUploadedFiles([]);
       }
-
-      let resultResumes = [];
-      if (type === 'public') {
-        resultResumes = await api.fetchPublicResumes();
-      } else {
-        const val = prompt("请输入您存放在云端的私有简历包的文件名 (例如: my_resumes.zip):");
-        if (!val) {
-          setPhase('INGEST');
-          return;
-        }
-        resultResumes = await api.fetchPrivateResumes(val.trim());
-      }
-
-      setProcessedCount(resultResumes.length);
-      setLogs(prev => [...prev, `[SUCCESS] 简历云端拉取完成，共解析 ${resultResumes.length} 份简历...`]);
-      setLogs(prev => [...prev, "[ANALYSIS] 正在进行多维能力画像匹配... (可能需要1-2分钟)"]);
-
-      const ranks = await api.analyzeResumes();
-      setLogs(prev => [...prev, `[RESULT] 完成分析，发现 ${ranks.length} 位高潜力候选人。`]);
-      setTimeout(() => {
-        setCandidates(ranks);
-        setPhase('RESULTS');
-      }, 1000);
-
-    } catch (e) {
-      setLogs(prev => [...prev, `[ERROR] 处理失败: ${e}`]);
-      alert("处理失败，请重试");
-      setPhase('INGEST');
     }
   };
 
@@ -1095,31 +1093,32 @@ function ExecutionDashboard({
             onClick={() => fileInputRef.current?.click()}
             className={cn("w-full aspect-[2.5/1] border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center relative overflow-hidden cursor-pointer transition-all duration-300", isDragOver ? "border-indigo-500 bg-indigo-500/10 scale-[1.02]" : "border-white/10 bg-white/[0.02] hover:border-indigo-500/30 hover:bg-white/[0.04]")}
           >
-            <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.zip" onChange={e => { if (e.target.files?.length) setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)]) }} className="hidden" />
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.zip" onChange={e => { if (e.target.files?.length) { setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)]); setCloudSource(null); } }} className="hidden" />
             <div className={cn("w-20 h-20 rounded-2xl flex items-center justify-center mb-6 transition-all duration-300", isDragOver ? "bg-indigo-600 scale-110" : "bg-black border border-white/10")}><UploadCloud className={cn("w-8 h-8", isDragOver ? "text-white" : "text-indigo-400")} /></div>
-            <h3 className="text-2xl font-bold text-white mb-2">{isDragOver ? "释放以上传文件" : "拖拽简历到这里"}</h3>
-            <p className="text-zinc-500 text-sm text-center mb-4">上传并自动执行匹配 (支持 PDF, TXT, ZIP) <br /><span className="text-indigo-400 hover:underline">或点击选择文件</span></p>
+            <h3 className="text-2xl font-bold text-white mb-2">{isDragOver ? "释放以上传文件" : "拖拽本地简历到这里"}</h3>
+            <p className="text-zinc-500 text-sm text-center mb-4">或者 <span className="text-indigo-400 hover:underline">点击选择本地文件</span></p>
           </div>
 
-          <div className="flex gap-4 w-full justify-center">
-            <button onClick={() => handleCloudSource('public')} className="px-6 py-3 bg-white/5 border border-white/10 text-white rounded-xl hover:bg-white/10 transition-colors text-sm font-bold flex items-center gap-2">
-              <UploadCloud className="w-4 h-4 text-emerald-400" /> 直接使用公有简历池匹配
+          <div className="flex gap-4 w-full justify-center mt-2">
+            <button onClick={() => handleSelectCloudSource('public')} className={cn("px-6 py-3 border border-white/10 rounded-xl transition-colors text-sm font-bold flex items-center gap-2", cloudSource === 'public' ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50" : "bg-white/5 text-white hover:bg-white/10")}>
+              <UploadCloud className="w-4 h-4 text-emerald-400" /> {cloudSource === 'public' ? "已选定：公有简历池" : "选择公有简历池"}
             </button>
-            <button onClick={() => handleCloudSource('private')} className="px-6 py-3 bg-white/5 border border-white/10 text-white rounded-xl hover:bg-white/10 transition-colors text-sm font-bold flex items-center gap-2">
-              <UploadCloud className="w-4 h-4 text-purple-400" /> 拉取账号私有简历池匹配
+            <button onClick={() => handleSelectCloudSource('private')} className={cn("px-6 py-3 border border-white/10 rounded-xl transition-colors text-sm font-bold flex items-center gap-2", cloudSource && typeof cloudSource === 'object' && cloudSource.type === 'private' ? "bg-purple-500/20 text-purple-300 border-purple-500/50" : "bg-white/5 text-white hover:bg-white/10")}>
+              <UploadCloud className="w-4 h-4 text-purple-400" /> {cloudSource && typeof cloudSource === 'object' && cloudSource.type === 'private' ? `已选定：${cloudSource.filename}` : "选择账号私有简历"}
             </button>
           </div>
 
           {uploadedFiles.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/[0.02] border border-white/10 rounded-2xl p-6">
-              <div className="flex justify-between items-center mb-4"><h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2"><FileText className="w-4 h-4" />已选择 {uploadedFiles.length} 份简历</h4><button onClick={(e) => { e.stopPropagation(); setUploadedFiles([]) }} className="text-xs text-zinc-500 hover:text-red-400 transition-colors">清空全部</button></div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/[0.02] border border-white/10 rounded-2xl p-6 mt-4 w-full">
+              <div className="flex justify-between items-center mb-4"><h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2"><FileText className="w-4 h-4" />已选择本地文件</h4><button onClick={(e) => { e.stopPropagation(); setUploadedFiles([]) }} className="text-xs text-zinc-500 hover:text-red-400 transition-colors">清空</button></div>
               <div className="space-y-2 max-h-48 overflow-y-auto">{uploadedFiles.map((file, i) => (<div key={i} className="flex items-center justify-between py-2 px-3 bg-black/30 rounded-lg group"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center"><FileText className="w-4 h-4 text-indigo-400" /></div><div><div className="text-sm text-white truncate max-w-[200px]">{file.name}</div><div className="text-xs text-zinc-500">{(file.size / 1024).toFixed(1)} KB</div></div></div><button onClick={(e) => { e.stopPropagation(); setUploadedFiles(prev => prev.filter((_, idx) => idx !== i)) }} className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all"><XCircle className="w-4 h-4" /></button></div>))}</div>
               {uploadProgress > 0 && <div className="mt-4"><div className="h-2 bg-white/5 rounded-full overflow-hidden"><motion.div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500" style={{ width: `${uploadProgress}%` }} /></div></div>}
             </motion.div>
           )}
-          <div className="flex justify-center gap-4">
-            <button onClick={startProcessing} disabled={uploadedFiles.length === 0} className={cn("px-12 py-4 rounded-2xl font-bold text-base transition-all flex items-center gap-3", uploadedFiles.length > 0 ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_40px_rgba(79,70,229,0.4)] active:scale-95" : "bg-white/5 text-zinc-600 cursor-not-allowed")}><Cpu className="w-5 h-5" />本地解析与匹配</button>
-            <button onClick={handleUploadToPrivateCloud} disabled={uploadedFiles.length === 0} className={cn("px-6 py-4 rounded-2xl font-bold text-base transition-all flex items-center", uploadedFiles.length > 0 ? "bg-[#0A0A0B] border border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-400 shadow-[0_0_20px_rgba(79,70,229,0.1)] active:scale-95" : "bg-white/5 text-zinc-600 cursor-not-allowed hidden")}>传为专有包</button>
+
+          <div className="flex justify-center gap-4 mt-4">
+            <button onClick={startProcessing} disabled={uploadedFiles.length === 0 && !cloudSource} className={cn("px-12 py-4 rounded-2xl font-bold text-base transition-all flex items-center gap-3", (uploadedFiles.length > 0 || cloudSource) ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_40px_rgba(79,70,229,0.4)] active:scale-95" : "bg-white/5 text-zinc-600 cursor-not-allowed")}><Cpu className="w-5 h-5" />{uploadedFiles.length > 0 ? "本地提析与匹配" : "云端提析与匹配"}</button>
+            <button onClick={handleUploadToPrivateCloud} disabled={uploadedFiles.length === 0} className={cn("px-6 py-4 rounded-2xl font-bold text-base transition-all flex items-center", uploadedFiles.length > 0 ? "bg-[#0A0A0B] border border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-400 shadow-[0_0_20px_rgba(79,70,229,0.1)] active:scale-95 cursor-pointer" : "bg-white/5 text-zinc-600 hidden")}>仅上传至私有库</button>
           </div>
         </div>
       </div>

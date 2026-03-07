@@ -1,0 +1,20 @@
+﻿src/App.tsx(237,30): error TS2345: Argument of type '{ title: string; key_responsibilities: never[]; required_skills: string[]; experience_level: string; salary: { range: string; tax_type: string; has_bonus: false; description: string | undefined; }; work_location: string; bonus_skills: string[]; }' is not assignable to parameter of type 'JobDefinition'.
+  Type '{ title: string; key_responsibilities: never[]; required_skills: string[]; experience_level: string; salary: { range: string; tax_type: string; has_bonus: false; description: string | undefined; }; work_location: string; bonus_skills: string[]; }' is missing the following properties from type 'JobDefinition': education, culture_fit
+src/App.tsx(500,220): error TS2345: Argument of type '"role"' is not assignable to parameter of type 'keyof JobDefinition'.
+src/App.tsx(504,225): error TS2345: Argument of type '"exp_level"' is not assignable to parameter of type 'keyof JobDefinition'.
+src/App.tsx(508,243): error TS2345: Argument of type '"stack"' is not assignable to parameter of type 'keyof JobDefinition'.
+src/App.tsx(512,240): error TS2345: Argument of type '"plus_points"' is not assignable to parameter of type 'keyof JobDefinition'.
+src/App.tsx(520,233): error TS2345: Argument of type '"remarks"' is not assignable to parameter of type 'keyof JobDefinition'.
+src/App.tsx(547,30): error TS2345: Argument of type '{ title: string; key_responsibilities: never[]; required_skills: string[]; experience_level: string; salary: { range: string; tax_type: string; has_bonus: false; description: string; }; work_location: string; bonus_skills: string[]; }' is not assignable to parameter of type 'JobDefinition'.
+  Type '{ title: string; key_responsibilities: never[]; required_skills: string[]; experience_level: string; salary: { range: string; tax_type: string; has_bonus: false; description: string; }; work_location: string; bonus_skills: string[]; }' is missing the following properties from type 'JobDefinition': education, culture_fit
+src/App.tsx(706,76): error TS2353: Object literal may only specify known properties, and 'role' does not exist in type 'JobDefinition | (() => JobDefinition)'.
+src/App.tsx(821,39): error TS2345: Argument of type '{ question_id: string; answer: string | undefined; }[]' is not assignable to parameter of type 'ClarificationAnswer[]'.
+  Type '{ question_id: string; answer: string | undefined; }' is not assignable to type 'ClarificationAnswer'.
+    Types of property 'answer' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/App.tsx(824,9): error TS2353: Object literal may only specify known properties, and 'role' does not exist in type 'JobDefinition'.
+src/App.tsx(862,146): error TS2339: Property 'title' does not exist on type 'ChatMessage'.
+src/App.tsx(863,144): error TS2339: Property 'title' does not exist on type 'ChatMessage'.
+src/App.tsx(864,28): error TS2339: Property 'title' does not exist on type 'ChatMessage'.
+src/App.tsx(866,122): error TS2339: Property 'title' does not exist on type 'ChatMessage'.

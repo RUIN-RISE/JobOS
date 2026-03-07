@@ -188,14 +188,6 @@ async def logout(x_session_id: str = Header(None), user: UserState = Depends(get
         
     return {"status": "success"}
 
-async def get_current_user(x_session_id: str = Header(None)) -> UserState:
-    if not x_session_id:
-        raise HTTPException(status_code=401, detail="Missing X-Session-ID")
-    
-    if x_session_id not in SESSIONS:
-        raise HTTPException(status_code=401, detail="Session expired or invalid")
-    
-    return SESSIONS[x_session_id]
 
 # Clean up globals
 # CURRENT_JD = None
@@ -255,6 +247,7 @@ async def generate_jd_endpoint(req: GenerateJdRequest, bg_tasks: BackgroundTasks
 
 @app.post("/api/upload_resumes", response_model=List[Resume])
 async def upload_resumes(file: UploadFile = File(...), user: UserState = Depends(get_current_user)):
+    user.resumes.clear()
     content = await file.read()
     filename = file.filename
     return await process_resume_content(content, filename, user)
@@ -502,13 +495,15 @@ async def upload_private(file: UploadFile = File(...), user: UserState = Depends
 @app.post("/api/fetch_private_resumes", response_model=List[Resume])
 async def fetch_private_resumes(filename: str, user: UserState = Depends(get_current_user)):
     import os
+    import urllib.parse
     from dotenv import load_dotenv
     import httpx
     
     load_dotenv(override=True)
     cloud_api = os.getenv("CLOUD_STORAGE_API", "http://163.7.10.125:80")
     
-    url = f"{cloud_api}/api/cloud/download_private_resume/{user.account_name}/{filename}?session_id={user.session_id}"
+    safe_filename = urllib.parse.quote(filename)
+    url = f"{cloud_api}/api/cloud/download_private_resume/{user.account_name}/{safe_filename}?session_id={user.session_id}"
     print(f"Fetching private user resumes from: {url}")
     
     try:
