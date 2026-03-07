@@ -31,18 +31,6 @@ if not SILICON_API_KEY:
 # Available models in order of preference
 MODEL_CONFIGS = [
     {
-        "id": "step-3.5-flash",
-        "name": "Step-3.5-Flash (SF1)",
-        "base_url":  "https://api.stepfun.com/v1",
-        "api_key": SF_API_KEY_1
-    },
-    {
-        "id": "step-3.5-flash",
-        "name": "Step-3.5-Flash (SF2)",
-        "base_url":  "https://api.stepfun.com/v1",
-        "api_key": SF_API_KEY_2
-    },
-    {
         "id": "MiniMax/MiniMax-M2.5",
         "name": "MiniMax-M2.5 (ModelScope)",
         "base_url": "https://api-inference.modelscope.cn/v1",
@@ -53,6 +41,18 @@ MODEL_CONFIGS = [
         "name": "Step-3.5-Flash (ModelScope)",
         "base_url": "https://api-inference.modelscope.cn/v1",
         "api_key": MS_API_KEY
+    },
+    {
+        "id": "step-3.5-flash",
+        "name": "Step-3.5-Flash (SF1)",
+        "base_url":  "https://api.stepfun.com/v1",
+        "api_key": SF_API_KEY_1
+    },
+    {
+        "id": "step-3.5-flash",
+        "name": "Step-3.5-Flash (SF2)",
+        "base_url":  "https://api.stepfun.com/v1",
+        "api_key": SF_API_KEY_2
     },
     {
         "id": "ZhipuAI/GLM-4.7",
