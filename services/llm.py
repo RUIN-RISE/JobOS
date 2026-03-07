@@ -14,16 +14,34 @@ from .models import ClarificationQuestion, ClarificationResponse, JobDefinition,
 # Multi-model configuration with automatic fallback
 # API Keys
 MS_API_KEY = os.environ.get("MS_API_KEY")
+SF_API_KEY_1 = os.environ.get("SF_API_KEY_1")
+SF_API_KEY_2 = os.environ.get("SF_API_KEY_2")
 SILICON_API_KEY = os.environ.get("SILICON_API_KEY")
 
 if not MS_API_KEY:
     print("Warning: MS_API_KEY not found.")
+if not SF_API_KEY_1:
+    print("Warning: SF_API_KEY_1 not found.")
+if not SF_API_KEY_2:
+    print("Warning: SF_API_KEY_2 not found.")
 if not SILICON_API_KEY:
     print("Warning: SILICON_API_KEY not found.")
 
 # Configuration for multi-provider support
 # Available models in order of preference
 MODEL_CONFIGS = [
+    {
+        "id": "step-3.5-flash",
+        "name": "Step-3.5-Flash (SF1)",
+        "base_url":  "https://api.stepfun.com/v1",
+        "api_key": SF_API_KEY_1
+    },
+    {
+        "id": "step-3.5-flash",
+        "name": "Step-3.5-Flash (SF2)",
+        "base_url":  "https://api.stepfun.com/v1",
+        "api_key": SF_API_KEY_2
+    },
     {
         "id": "MiniMax/MiniMax-M2.5",
         "name": "MiniMax-M2.5 (ModelScope)",
@@ -428,6 +446,7 @@ def parse_raw_jd(text: str) -> JobDefinition:
     1. 提取"薪资"信息到 `salary` 对象。
     2. "工作地点" (`work_location`) 如果文中没有绝对倾向，默认填 "杭州"。
     3. 严格区分 "加分项" (`bonus_skills`) 和 "软技能/团队文化" (`culture_fit`)。
+    4. **只允许输出一个干净的合法 JSON 字符串，不要使用 ```json 等代码块包裹，不要添加任何额外的解释性文本。**
     
     输出格式示例：
     {{
@@ -447,15 +466,31 @@ def parse_raw_jd(text: str) -> JobDefinition:
         "culture_fit": ["沟通能力强", "抗压能力好"]
     }}
     """
-    conn = _call_llm([
+    messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt}
-    ])
-    try:
-        data = json.loads(conn)
-        return JobDefinition(**data)
-    except:
-        return JobDefinition(title="生成失败", key_responsibilities=[], required_skills=[], experience_level="", education="未指定", bonus_skills=[], culture_fit=[])
+    ]
+    
+    for _ in range(3):
+        conn = _call_llm(messages)
+        try:
+            # 兼容有可能出现的 Markdown Block
+            clean_str = conn.strip()
+            if clean_str.startswith("```json"):
+                clean_str = clean_str[7:]
+            elif clean_str.startswith("```"):
+                clean_str = clean_str[3:]
+            if clean_str.endswith("```"):
+                clean_str = clean_str[:-3]
+            clean_str = clean_str.strip()
+            
+            data = json.loads(clean_str)
+            return JobDefinition(**data)
+        except Exception as e:
+            messages.append({"role": "assistant", "content": conn})
+            messages.append({"role": "user", "content": f"JSON 解析失败: {e}。请纠正格式，只输出合法的 JSON 文本，不要附加其他内容。"})
+            
+    return JobDefinition(title="生成失败（请查看原始招聘内容重试）", key_responsibilities=[], required_skills=[], experience_level="", education="未指定", bonus_skills=[], culture_fit=[])
 
 def _parse_resume_fields(content: str) -> Dict:
     """Extract structured fields from resume content"""
