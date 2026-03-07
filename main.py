@@ -84,6 +84,11 @@ def get_current_user(x_session_id: str = Header(None)) -> UserState:
         raise HTTPException(status_code=401, detail="登录会话已过期或失效，请重新登录")
     return user
 
+def get_optional_user(x_session_id: str = Header(None)) -> UserState | None:
+    if not x_session_id:
+        return None
+    return SESSIONS.get(x_session_id)
+
 import time
 
 # Load invites
@@ -199,31 +204,33 @@ async def read_root():
     return FileResponse('templates/index.html')
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_clarify_endpoint(req: ChatRequest, user: UserState = Depends(get_current_user)):
+async def chat_clarify_endpoint(req: ChatRequest, user: UserState | None = Depends(get_optional_user)):
     """Multi-turn dialogue endpoint for requirement clarification"""
     
     # Use provided history or stored history
-    history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else user.chat_history
+    history = [{"role": m.role, "content": m.content} for m in req.history] if req.history else (user.chat_history if user else [])
     
     # Call LLM
     response = llm.chat_clarify(history, req.message)
     
-    # Store updated history
-    if req.message:
-        user.chat_history.append({"role": "user", "content": req.message})
-    user.chat_history.append({"role": "assistant", "content": response.reply})
-    
-    # Store collected info
-    if response.collected_info:
-        user.collected_info.update(response.collected_info)
+    # Store updated history only if in a tracked session
+    if user:
+        if req.message:
+            user.chat_history.append({"role": "user", "content": req.message})
+        user.chat_history.append({"role": "assistant", "content": response.reply})
+        
+        # Store collected info
+        if response.collected_info:
+            user.collected_info.update(response.collected_info)
     
     return response
 
 @app.post("/api/reset_chat")
-async def reset_chat(user: UserState = Depends(get_current_user)):
+async def reset_chat(user: UserState | None = Depends(get_optional_user)):
     """Reset chat history for a new conversation"""
-    user.chat_history = []
-    user.collected_info = {}
+    if user:
+        user.chat_history = []
+        user.collected_info = {}
     return {"status": "ok"}
 
 @app.post("/api/clarify", response_model=ClarificationResponse)
@@ -235,13 +242,14 @@ class GenerateJdRequest(BaseModel):
     raw_req: str
 
 @app.post("/api/generate_jd", response_model=JobDefinition)
-async def generate_jd_endpoint(req: GenerateJdRequest, bg_tasks: BackgroundTasks, user: UserState = Depends(get_current_user)):
+async def generate_jd_endpoint(req: GenerateJdRequest, bg_tasks: BackgroundTasks, user: UserState | None = Depends(get_optional_user)):
     # Convert list to dict for LLM
     answers_dict = {a.question_id: a.answer for a in req.answers}
     jd = llm.generate_jd(answers_dict, req.raw_req)
-    user.current_jd = jd
     
-    bg_tasks.add_task(save_dict_to_cloud_bg, user.account_name, user.session_id, "jd", jd.dict())
+    if user:
+        user.current_jd = jd
+        bg_tasks.add_task(save_dict_to_cloud_bg, user.account_name, user.session_id, "jd", jd.dict())
     
     return jd
 

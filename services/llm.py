@@ -490,105 +490,124 @@ def rank_candidates(jd: JobDefinition, resumes: List[Dict]) -> List[CandidateRan
 ]
 
 严禁只返回1个对象！必须返回5个！以 [ 开头！
+【严重警告】在撰写每个对象的内部字典时，对象右闭合必定是大括号。请绝对不要误用小括号导致 JSON 解析彻底崩溃！
 """
     
     print("DEBUG: Sending to LLM for ranking...")
-    conn = _call_llm([
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt}
-    ])
-    print("DEBUG: LLM Response (first 1000 chars):\n", conn[:1000])
-    
-    try:
-        # Extract JSON
-        idx_list = conn.find('[')
-        idx_dict = conn.find('{')
-        
-        if idx_list != -1 and (idx_dict == -1 or idx_list < idx_dict):
-            start_idx = idx_list
-            end_idx = conn.rfind(']')
-        elif idx_dict != -1:
-            start_idx = idx_dict
-            end_idx = conn.rfind('}')
-        else:
-            start_idx, end_idx = 0, len(conn)
-            
-        json_str = conn[start_idx:end_idx+1] if start_idx != -1 and end_idx != -1 else conn
+    max_retries = 3
+    for attempt in range(max_retries):
+        conn = _call_llm([
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ])
+        print(f"DEBUG: LLM Response Attempt {attempt + 1} (first 1000 chars):\n", conn[:1000])
         
         try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            print(f"JSON Decode Error: {e}. Attempting robust repair...")
-            data = []
-            # Try to grab all individual JSON objects using regex
-            import re
-            objs = re.findall(r'\{[^{]*"score"[^}]*\}', json_str)
-            for obj_str in objs:
-                try:
-                    # Basic attempts to fix common broken JSON trailing commas
-                    obj_str = re.sub(r',\s*\}', '}', obj_str)
-                    data.append(json.loads(obj_str))
-                except:
-                    pass
-            if not data:
-                # Fallback to simple replacement if regex fails completely
-                fixed_str = re.sub(r'}\s*{', '}, {', json_str)
-                if not fixed_str.strip().startswith('['):
-                    fixed_str = f"[{fixed_str}]"
-                if not fixed_str.strip().endswith(']'):
-                    fixed_str += '}]'
-                try:
-                    data = json.loads(fixed_str)
-                except:
-                    pass
-        
-        if isinstance(data, dict):
-            if "error" in data:
-                print(f"LLM Refused: {data['error']}")
-                return []
-            data = [data]
-        
-        print(f"DEBUG: Parsed data type={type(data)}, length={len(data) if isinstance(data, list) else 'N/A'}")
-        if isinstance(data, list) and len(data) > 0:
-            print(f"DEBUG: First item keys: {data[0].keys() if isinstance(data[0], dict) else 'not a dict'}")
-        
-        # Clean and normalize
-        cleaned = []
-        for item in data:
-            if isinstance(item, str):
-                try: item = json.loads(item)
-                except: continue
-            if not isinstance(item, dict):
-                continue
-                
-            # Auto-fill missing fields
-            if "rank" not in item: item["rank"] = 0
-            if "name" not in item:
-                item["name"] = item.get("resume_id", "Unknown").replace(".txt", "").split("_")[0]
-            if "summary" not in item:
-                item["summary"] = "AI匹配评分"
-            if "evidence_quotes" not in item:
-                item["evidence_quotes"] = []
-            if "top_evidence" not in item:
-                item["top_evidence"] = []
-            elif isinstance(item["top_evidence"], list) and item["top_evidence"]:
-                if isinstance(item["top_evidence"][0], str):
-                    item["top_evidence"] = [{"criteria": t, "quote": "", "reasoning": ""} for t in item["top_evidence"]]
+            # Extract JSON
+            idx_list = conn.find('[')
+            idx_dict = conn.find('{')
             
-            cleaned.append(item)
+            if idx_list != -1 and (idx_dict == -1 or idx_list < idx_dict):
+                start_idx = idx_list
+                end_idx = conn.rfind(']')
+            elif idx_dict != -1:
+                start_idx = idx_dict
+                end_idx = conn.rfind('}')
+            else:
+                start_idx, end_idx = 0, len(conn)
+                
+            json_str = conn[start_idx:end_idx+1] if start_idx != -1 and end_idx != -1 else conn
+            
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                print(f"JSON Decode Error: {e}. Attempting robust repair...")
+                
+                # Fix common illusion from MiniMax LLM: incorrectly using ) instead of } to close JSON dicts.
+                json_str = json_str.replace('),', '},').replace(')]', '}]')
+                import re
+                json_str = re.sub(r'"\s*\)', '"}', json_str) # Fix cases like "..." )
+                
+                try:
+                    data = json.loads(json_str)
+                except Exception as nested_e:
+                    print(f"Second repair failed: {nested_e}. Last resort scanning...")
+                    data = []
+                    objs = re.findall(r'\{[^{]*"score"[^}]*\}', json_str)
+                    for obj_str in objs:
+                        try:
+                            # Basic attempts to fix common broken JSON trailing commas
+                            obj_str = re.sub(r',\s*\}', '}', obj_str)
+                            data.append(json.loads(obj_str))
+                        except:
+                            pass
+                if not data:
+                    # Fallback to simple replacement if regex fails completely
+                    fixed_str = re.sub(r'}\s*{', '}, {', json_str)
+                    if not fixed_str.strip().startswith('['):
+                        fixed_str = f"[{fixed_str}]"
+                    if not fixed_str.strip().endswith(']'):
+                        fixed_str += '}]'
+                    try:
+                        data = json.loads(fixed_str)
+                    except:
+                        pass
+            
+            if isinstance(data, dict):
+                if "error" in data:
+                    print(f"LLM Refused: {data['error']}")
+                    if attempt == max_retries - 1:
+                        return []
+                    continue
+                data = [data]
+            
+            print(f"DEBUG: Parsed data type={type(data)}, length={len(data) if isinstance(data, list) else 'N/A'}")
+            if isinstance(data, list) and len(data) > 0:
+                print(f"DEBUG: First item keys: {data[0].keys() if isinstance(data[0], dict) else 'not a dict'}")
+            
+            # Clean and normalize
+            cleaned = []
+            for item in data:
+                if isinstance(item, str):
+                    try: item = json.loads(item)
+                    except: continue
+                if not isinstance(item, dict):
+                    continue
+                    
+                # Auto-fill missing fields
+                if "rank" not in item: item["rank"] = 0
+                if "name" not in item:
+                    item["name"] = item.get("resume_id", "Unknown").replace(".txt", "").split("_")[0]
+                if "summary" not in item:
+                    item["summary"] = "AI匹配评分"
+                if "evidence_quotes" not in item:
+                    item["evidence_quotes"] = []
+                if "top_evidence" not in item:
+                    item["top_evidence"] = []
+                elif isinstance(item["top_evidence"], list) and item["top_evidence"]:
+                    if isinstance(item["top_evidence"][0], str):
+                        item["top_evidence"] = [{"criteria": t, "quote": "", "reasoning": ""} for t in item["top_evidence"]]
+                
+                cleaned.append(item)
+            
+            # Sort and rank
+            cleaned.sort(key=lambda x: x.get("score", 0), reverse=True)
+            for i, item in enumerate(cleaned):
+                item["rank"] = i + 1
+            
+            print(f"DEBUG: Parsed {len(cleaned)} candidates from LLM response")
+            if len(cleaned) == 0 and attempt < max_retries - 1:
+                print("DEBUG: 0 candidates parsed, retrying...")
+                continue
+            return [CandidateRank(**item) for item in cleaned[:5]]
         
-        # Sort and rank
-        cleaned.sort(key=lambda x: x.get("score", 0), reverse=True)
-        for i, item in enumerate(cleaned):
-            item["rank"] = i + 1
-        
-        print(f"DEBUG: Parsed {len(cleaned)} candidates from LLM response")
-        return [CandidateRank(**item) for item in cleaned[:5]]
+        except Exception as e:
+            print(f"Ranking Error on attempt {attempt + 1}: {e}")
+            if attempt == max_retries - 1:
+                print(f"Full content: {conn[:500]}")
+                return []
     
-    except Exception as e:
-        print(f"Ranking Error: {e}")
-        print(f"Full content: {conn[:500]}")
-        return []
+    return []
 
 
 def generate_action(candidate_name: str, action_type: str, job_title: str, current_jd=None) -> ActionResponse:
