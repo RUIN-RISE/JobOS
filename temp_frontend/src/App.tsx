@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Terminal,
+  // Terminal,
   UploadCloud,
   XCircle,
   ChevronDown,
@@ -21,10 +21,8 @@ import {
   ChevronLeft,
   FileText,
   User,
-  Terminal as BotIcon,
   LogOut,
   History,
-  Lock,
   Unlock,
   Archive,
   RefreshCw,
@@ -124,14 +122,67 @@ export default function JobOSCmdDeck() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Global Motion: Mouse Tracking
+  const cursorDotRef = useRef<HTMLDivElement>(null);
+  const cursorRingRef = useRef<HTMLDivElement>(null);
+
+  // Global Motion: Mouse Tracking & Custom Cursor
   useEffect(() => {
+    const dot = cursorDotRef.current;
+    const ring = cursorRingRef.current;
+    // 外环使用 requestAnimationFrame 做平滑跟随
+    let ringX = 0, ringY = 0, mouseX = 0, mouseY = 0;
+
     const handleMouseMove = (e: MouseEvent) => {
-      document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`);
-      document.documentElement.style.setProperty('--mouse-y', `${e.clientY}px`);
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      // CSS 变量供光晕背景使用
+      document.documentElement.style.setProperty('--mouse-x', `${mouseX}px`);
+      document.documentElement.style.setProperty('--mouse-y', `${mouseY}px`);
+      // 圆点即时跟随
+      if (dot) {
+        dot.style.left = `${mouseX}px`;
+        dot.style.top = `${mouseY}px`;
+      }
     };
+
+    // 外环延迟跟随动画
+    let raf: number;
+    const animateRing = () => {
+      ringX += (mouseX - ringX) * 0.15;
+      ringY += (mouseY - ringY) * 0.15;
+      if (ring) {
+        ring.style.left = `${ringX}px`;
+        ring.style.top = `${ringY}px`;
+      }
+      raf = requestAnimationFrame(animateRing);
+    };
+    raf = requestAnimationFrame(animateRing);
+
+    // 悬停可交互元素时放大光标
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('a, button, input, textarea, select, [role="button"], label')) {
+        dot?.classList.add('hovering');
+        ring?.classList.add('hovering');
+      }
+    };
+    const handleMouseOut = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('a, button, input, textarea, select, [role="button"], label')) {
+        dot?.classList.remove('hovering');
+        ring?.classList.remove('hovering');
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseover', handleMouseOver);
+    document.addEventListener('mouseout', handleMouseOut);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseover', handleMouseOver);
+      document.removeEventListener('mouseout', handleMouseOut);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   // Handlers
@@ -152,14 +203,16 @@ export default function JobOSCmdDeck() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 overflow-hidden relative">
+    <div className="min-h-screen bg-black text-zinc-300 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 overflow-hidden relative">
       <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-150 contrast-150 mix-blend-overlay"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black/80"></div>
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-indigo-600/10 blur-[150px] rounded-full animate-pulse-slow"></div>
-        <div className="absolute inset-0 z-30 transition-opacity duration-300 pointer-events-none" style={{ background: `radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(29, 78, 216, 0.15), transparent 40%)` }} />
+        <div className="absolute inset-0 z-30 transition-opacity duration-300 pointer-events-none" style={{ background: `radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(29, 78, 216, 0.05), transparent 40%)` }} />
       </div>
+
+      {/* 鼠标跟随光晕 */}
+      <div className="mouse-glow" />
+      {/* 自定义光标 */}
+      <div ref={cursorDotRef} className="cursor-dot" />
+      <div ref={cursorRingRef} className="cursor-ring" />
 
       <header className="fixed top-0 w-full z-50 h-20 px-8 flex items-center justify-between border-b border-white/5 bg-black/60 backdrop-blur-xl transition-all duration-500">
         <div className="flex items-center gap-4">
@@ -187,10 +240,10 @@ export default function JobOSCmdDeck() {
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value.toUpperCase())}
                 placeholder="输入内测码..."
-                className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm font-mono text-white focus:outline-none focus:border-indigo-500 w-40 placeholder:text-zinc-600 transition-colors uppercase"
+                className="bg-transparent border border-white/10 rounded-full px-4 py-1.5 text-sm font-mono text-white focus:outline-none focus:border-indigo-500 w-32 placeholder:text-zinc-600 transition-colors uppercase hover:bg-white/5"
               />
-              <button type="submit" className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-500 transition-colors">
-                <Lock className="w-4 h-4" />
+              <button type="submit" className="border border-white/10 text-white px-5 py-1.5 rounded-full text-sm font-medium hover:bg-white/5 transition-colors">
+                登录
               </button>
             </form>
           ) : (
@@ -558,33 +611,51 @@ function LandingPage({ onStart, isLogged, onSkipToDashboard, onImportJd }: { onS
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4">
-      <div className="relative mb-20 group">
-        <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-[120px] animate-pulse-slow"></div>
-        <div className="relative w-40 h-40 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl flex items-center justify-center shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_0_60px_rgba(99,102,241,0.2)]">
-          <Radar className="w-16 h-16 text-indigo-400 animate-spin-slow duration-[10s]" />
-          <div className="absolute inset-0 rounded-full border border-indigo-500/30 border-t-transparent animate-spin duration-[4s]"></div>
+      {/* 中央智能图标 (呼吸、闪烁、旋转环动效) */}
+      <div className="mb-14 relative animate-fadeInUp delay-100 group cursor-default">
+        {/* 底层发光 */}
+        <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full animate-glowPulse" />
+
+        {/* 核心主体 */}
+        <div className="w-24 h-24 rounded-full border border-zinc-800 bg-zinc-950 flex items-center justify-center relative z-10 animate-breathe shadow-2xl">
+          {/* 旋转科技细环 */}
+          <div className="absolute -inset-1 rounded-full border border-dashed border-blue-500/30 animate-spinSlow pointer-events-none" />
+          <div className="absolute -inset-3 rounded-full border border-zinc-800/50 animate-spinSlowReverse pointer-events-none" />
+
+          <Radar className="w-10 h-10 text-blue-400/90 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
         </div>
       </div>
 
-      <div className="text-center max-w-6xl space-y-12 mb-24 relative z-10">
-        <h1 className="text-7xl md:text-8xl font-black text-white tracking-[-0.05em] leading-[1.1] drop-shadow-2xl">
+      <div className="text-center max-w-6xl space-y-8 mb-20 relative z-10">
+        <h1 className="text-6xl md:text-7xl font-black text-white tracking-tight leading-[1.1] drop-shadow-2xl">
           简历筛选<br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-white to-indigo-400 animate-gradient-x">从未如此智能</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E2E8F0] via-[#A3B8CC] to-[#5C7C99]">从未如此智能</span>
         </h1>
-        <p className="text-xl text-zinc-400 font-medium max-w-2xl mx-auto leading-relaxed">
-          将繁琐的初筛工作交给 AI。<br />
-          <span className="text-zinc-500 text-base mt-2 block">自动化流水线：岗位澄清 → 简历解析 → 智能排序 → 面试邀约</span>
-        </p>
+        <div className="space-y-6 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-zinc-500 font-medium">
+            将繁琐的初筛工作交给 AI。
+          </p>
+          <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full border border-white/5 bg-white/[0.02] text-zinc-500 text-sm tracking-wide">
+            <span>自动化流水线:</span>
+            <span>岗位澄清</span>
+            <span className="opacity-40">➔</span>
+            <span>简历解析</span>
+            <span className="opacity-40">➔</span>
+            <span>智能排序</span>
+            <span className="opacity-40">➔</span>
+            <span>面试邀约</span>
+          </div>
+        </div>
       </div>
 
       <div className="w-full max-w-3xl relative z-20">
-        <form onSubmit={(e) => { e.preventDefault(); if (input.trim()) onStart(input); }} className="relative bg-white/5 border border-white/20 rounded-3xl p-5 flex items-center shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-3xl transition-all focus-within:ring-4 focus-within:ring-indigo-500/20 focus-within:bg-black/80 focus-within:border-indigo-500/50 group hover:border-indigo-500/30 hover:shadow-[0_0_80px_rgba(99,102,241,0.15)]">
-          <div className="pl-6 pr-6 text-indigo-400">
-            <Terminal className="w-10 h-10" />
+        <form onSubmit={(e) => { e.preventDefault(); if (input.trim()) onStart(input); }} className="relative bg-[#111215] border border-white/10 rounded-full p-2 pl-6 flex items-center shadow-2xl transition-all focus-within:ring-1 focus-within:ring-blue-500/40 focus-within:bg-[#16171A] hover:border-white/20 group">
+          <div className="text-blue-500 font-mono text-xl font-bold opacity-80 select-none mr-2">
+            &gt;_
           </div>
-          <input autoFocus className="flex-1 bg-transparent border-none text-white text-3xl h-20 outline-none placeholder:text-zinc-700 font-mono font-bold tracking-tight caret-white" value={input} onChange={e => setInput(e.target.value)} placeholder="" />
+          <input autoFocus className="flex-1 bg-transparent border-none text-white text-lg h-14 outline-none placeholder:text-zinc-600 font-medium tracking-wide caret-blue-400" value={input} onChange={e => setInput(e.target.value)} placeholder="" />
           {!input && (
-            <div className="absolute left-28 top-1/2 -translate-y-1/2 text-zinc-600 text-lg pointer-events-none flex items-center font-mono opacity-50">
+            <div className="absolute left-14 top-1/2 -translate-y-1/2 text-zinc-600 text-lg pointer-events-none flex items-center font-medium opacity-50">
 
               <AnimatePresence mode="wait">
                 <motion.span key={suggestionIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.3 }}>
@@ -593,11 +664,11 @@ function LandingPage({ onStart, isLogged, onSkipToDashboard, onImportJd }: { onS
               </AnimatePresence>
             </div>
           )}
-          <div className="flex gap-4">
-            <MagneticButton type="submit" className="bg-white text-black hover:bg-indigo-50 hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] px-12 h-20 rounded-2xl font-black text-xl tracking-[0.2em] transition-all shadow-[0_0_30px_rgba(255,255,255,0.1)] flex items-center gap-3 whitespace-nowrap active:scale-95 uppercase">
+          <div className="flex gap-2">
+            <button type="submit" className="bg-[#007BFF] text-white hover:bg-[#0069DA] active:bg-[#0056B3] px-8 h-12 rounded-full font-bold text-sm tracking-widest transition-colors flex items-center gap-2 whitespace-nowrap shadow-[0_0_20px_rgba(0,123,255,0.3)] hover:shadow-[0_0_30px_rgba(0,123,255,0.5)]">
               开始筛选
-              <ArrowRight className="w-5 h-5" />
-            </MagneticButton>
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </button>
           </div>
         </form>
 
@@ -794,89 +865,175 @@ function SpecConfigurator({ initialUserInput, onComplete }: { initialUserInput: 
   return (
     <div className="w-[98%] h-[92vh] max-w-[1900px] relative animate-in fade-in zoom-in-95 duration-500 flex flex-col">
       <div className="glass-dark border border-white/10 rounded-[2.5rem] p-1 shadow-2xl relative overflow-hidden ring-1 ring-white/5 transition-all duration-500 flex-1 flex flex-col bg-black/80 backdrop-blur-3xl">
-        <div className="px-10 py-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+        {/* Header Section */}
+        <div className="px-10 py-8 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
           <div className="flex items-center gap-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center">
-              <ShieldCheck className="w-7 h-7 text-indigo-400" />
+            <div className="w-14 h-14 rounded-2xl bg-[#0F1115] border border-white/10 flex items-center justify-center shadow-inner">
+              <ShieldCheck className="w-7 h-7 text-blue-500/90" />
             </div>
             <div>
               <h2 className="text-2xl font-bold text-white tracking-tight">定义目标画像</h2>
-              <p className="text-sm text-zinc-500 font-medium mt-1">与 AI 助理对话以明确需求</p>
+              <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider mt-1.5 opacity-60">岗位架构协议 V1.0</p>
             </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full ring-1 ring-white/5 shadow-inner">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.2em]">系统：正在实时同步</span>
           </div>
         </div>
 
+        {/* Main Content Area */}
         <div className="p-8 flex-1 overflow-hidden flex flex-col">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-full animate-in fade-in slide-in-from-left-4 duration-300">
+            {/* Chat Area (3/4 width) */}
             <div className="col-span-3 flex flex-col bg-white/[0.02] rounded-3xl border border-white/10 overflow-hidden relative shadow-inner">
-              <div className="absolute inset-0 bg-grid-white/[0.02] [mask-image:linear-gradient(to_bottom,transparent,black)] pointer-events-none"></div>
-              <div className="flex-1 overflow-y-auto p-8 space-y-8 relative z-10 scrollbar-hide">
+              <div className="flex-1 overflow-y-auto p-8 space-y-12 relative z-10 scrollbar-hide">
                 {messages.map((msg, i) => (
                   <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex gap-4 max-w-[90%]", msg.role === 'user' ? "ml-auto flex-row-reverse" : "")}>
-                    <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border border-white/10", msg.role === 'assistant' ? "bg-indigo-600 text-white" : "bg-white text-black")}>
-                      {msg.role === 'assistant' ? <BotIcon className="w-6 h-6" /> : <User className="w-6 h-6" />}
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg border overflow-hidden", msg.role === 'assistant' ? "bg-[#0F1115] border-white/10" : "bg-white text-black border-transparent")}>
+                      {msg.role === 'assistant' ? <img src="/logo_avatar.png" className="w-full h-full object-cover" alt="AI" /> : <User className="w-5 h-5" />}
                     </div>
-                    <div className={cn("p-6 rounded-3xl text-lg font-medium leading-relaxed max-w-[80%] shadow-2xl", msg.role === 'assistant' ? "bg-[#0A0A0B] border border-indigo-500/30 text-indigo-50 rounded-tl-none" : "bg-white text-zinc-900 rounded-tr-none")}>
+                    <div className={cn("px-5 py-3.5 rounded-2xl text-base font-medium leading-relaxed max-w-[85%] transition-all", msg.role === 'assistant' ? "bg-white/[0.03] border border-white/5 text-zinc-100" : "bg-blue-600 text-white shadow-lg shadow-blue-900/20 w-fit ml-auto")}>
                       {msg.content}
                     </div>
                   </motion.div>
                 ))}
+
                 {isAiThinking && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 max-w-[90%]">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center shrink-0"><BotIcon className="w-4 h-4 text-white" /></div>
-                    <div className="p-4 rounded-2xl rounded-tl-none bg-indigo-500/10 text-indigo-100"><Loader2 className="w-4 h-4 animate-spin" /> <span className="text-sm">AI 正在思考...</span></div>
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 max-w-[90%] items-center">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/20 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(59,130,246,0.2)] overflow-hidden">
+                      <img src="/logo_avatar.png" className="w-full h-full object-cover" alt="AI Thinking" />
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-blue-500/5 border border-blue-500/10 text-blue-100/80">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                      <span className="text-sm font-medium tracking-wide">解析需求并编码中...</span>
+                    </div>
                   </motion.div>
                 )}
+
                 {/* Quick Replies */}
                 {quickReplies.length > 0 && !isAiThinking && (
-                  <div className="flex flex-wrap gap-2 ml-16">
+                  <div className="flex flex-wrap gap-2 ml-14">
                     {quickReplies.map((qr, i) => (
-                      <button key={i} onClick={() => setChatInput(prev => prev ? prev + " " + qr : qr)} className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 rounded-full text-sm transition-all">{qr}</button>
+                      <button key={i} onClick={() => setChatInput(prev => prev ? prev + " " + qr : qr)} className="px-4 py-1.5 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/15 text-blue-300 rounded-full text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm">{qr}</button>
                     ))}
                   </div>
                 )}
                 <div ref={chatEndRef} />
               </div>
-              <form onSubmit={handleChatSubmit} className="p-4 border-t border-white/5 bg-white/[0.02]">
+
+              {/* Input Area */}
+              <form onSubmit={handleChatSubmit} className="p-4 border-t border-white/5 bg-white/[0.01]">
                 <div className="relative">
-                  <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="输入您的回答..." className="w-full bg-[#0A0A0B] border border-white/10 rounded-xl pl-6 pr-16 py-5 text-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner placeholder:text-zinc-600 transition-all font-medium" autoFocus disabled={isAiThinking} />
-                  <button type="submit" disabled={isAiThinking} className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
-                    <ArrowRight className="w-5 h-5 text-white" />
+                  <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="输入您的回答，描述招聘需求细节..." className="w-full bg-[#0A0B0D] border border-white/5 rounded-2xl pl-6 pr-16 py-5 text-base text-white focus:outline-none focus:ring-1 focus:ring-blue-500/30 placeholder:text-zinc-700 transition-all font-medium" autoFocus disabled={isAiThinking} />
+                  <button type="submit" disabled={isAiThinking} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-3 bg-[#1A1C20] border border-white/10 rounded-xl hover:bg-[#25282D] hover:border-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <ArrowRight className="w-5 h-5 text-zinc-400 group-hover:text-blue-400" />
                   </button>
                 </div>
               </form>
             </div>
 
-            {/* Live Preview */}
-            <div className="col-span-1 bg-[#050505] border-l border-white/10 p-8 text-sm overflow-y-auto relative backdrop-blur-md">
-              <div className="absolute top-6 right-6 text-indigo-500 animate-pulse"><Activity className="w-5 h-5" /></div>
-              <h3 className="text-zinc-500 font-bold uppercase tracking-[0.2em] mb-8 text-xs flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>实时岗位画像</h3>
-              <div className="space-y-8">
-                <div className="space-y-2">
-                  <span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">目标岗位</span>
-                  <span className="text-white block bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-base font-bold shadow-sm">{formData.title || '—'}</span>
+            {/* Live Preview Sidebar (1/4 width) */}
+            <div className="col-span-1 bg-black border-l border-white/5 p-8 overflow-y-auto relative backdrop-blur-3xl flex flex-col">
+              <div className="absolute top-6 right-8 text-white/20"><Activity className="w-4 h-4" /></div>
+              <h3 className="text-white/40 font-bold tracking-[0.2em] mb-12 text-[10px] uppercase flex items-center gap-3">实时构建画像</h3>
+
+              <div className="space-y-10 flex-1">
+                {/* Job Title */}
+                <div className="space-y-2.5">
+                  <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">目标岗位</span>
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-white/10 to-transparent rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition duration-500"></div>
+                    <span className="relative block bg-white/[0.04] backdrop-blur-md px-4 py-4 rounded-xl border border-white/5 text-lg font-bold text-white shadow-soft">
+                      {formData.title || '分析中...'}
+                    </span>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">核心技能</span>
-                  <div className="flex flex-wrap gap-2">{formData.required_skills.length > 0 ? formData.required_skills.map(s => <span key={s} className="text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20 text-xs font-bold shadow-[0_0_10px_rgba(99,102,241,0.1)]">{s}</span>) : <span className="text-zinc-700 italic"> 等待输入...</span>}</div>
+
+                {/* Skills Tag Cloud */}
+                <div className="space-y-3">
+                  <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">核心技术栈</span>
+                  <div className="flex flex-wrap gap-2 pl-0.5">
+                    {formData.required_skills.length > 0 ? (
+                      formData.required_skills.map(s => (
+                        <span key={s} className="text-white bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 text-sm font-bold shadow-inner">
+                          {s}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-zinc-700 italic text-sm tracking-wide">分析中...</span>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">经验要求</span><span className={cn("block text-base font-medium", formData.experience_level !== '未指定' ? "text-emerald-400" : "text-zinc-500")}>{formData.experience_level}</span></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">学历要求</span><span className={cn("block text-base font-medium", formData.education !== '未指定' ? "text-emerald-400" : "text-zinc-500")}>{formData.education}</span></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">薪资待遇</span><span className={cn("block text-base font-medium", formData.salary.description && formData.salary.description !== formData.title ? "text-emerald-400" : "text-zinc-500")}>{formData.salary.description === formData.title ? "等待输入..." : formData.salary.description}</span></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">软技能</span><div className="flex flex-wrap gap-2">{formData.culture_fit.length > 0 ? formData.culture_fit.map(s => <span key={s} className="text-purple-300 bg-purple-500/10 px-2 py-1 rounded-md border border-purple-500/20 text-xs">{s}</span>) : <span className="text-zinc-700 italic">...</span>}</div></div>
-                <div className="space-y-2"><span className="text-zinc-500 block text-xs uppercase tracking-wider font-bold">加分项</span><div className="flex flex-wrap gap-2">{formData.bonus_skills.length > 0 ? formData.bonus_skills.map(s => <span key={s} className="text-amber-300 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 text-xs">{s}</span>) : <span className="text-zinc-700 italic">...</span>}</div></div>
+
+                {/* Meta Attributes */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2.5">
+                    <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">经验年限</span>
+                    <div className="bg-white/[0.04] backdrop-blur-md border border-white/5 p-3.5 rounded-xl shadow-inner">
+                      <span className={cn("block text-base font-bold", formData.experience_level !== '未指定' ? "text-white" : "text-zinc-600")}>
+                        {formData.experience_level}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5">
+                    <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">最低学历</span>
+                    <div className="bg-white/[0.04] backdrop-blur-md border border-white/5 p-3.5 rounded-xl shadow-inner">
+                      <span className={cn("block text-base font-bold", formData.education !== '未指定' ? "text-white" : "text-zinc-600")}>
+                        {formData.education}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Salary Section */}
+                <div className="space-y-2.5">
+                  <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">薪资待遇</span>
+                  <div className="bg-white/[0.04] backdrop-blur-md border border-white/5 p-4 rounded-xl shadow-inner">
+                    <span className={cn("block text-base font-bold", (formData.salary.description && formData.salary.description !== formData.title) ? "text-white" : "text-zinc-600")}>
+                      {(formData.salary.description && formData.salary.description !== formData.title) ? formData.salary.description : "分析中..."}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bonus Items */}
+                <div className="space-y-3">
+                  <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">加分项要求</span>
+                  <div className="flex flex-wrap gap-2 pl-0.5">
+                    {formData.bonus_skills.length > 0 ? (
+                      formData.bonus_skills.map(s => <span key={s} className="text-white bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 text-sm font-bold">{s}</span>)
+                    ) : (
+                      <span className="text-zinc-800 text-xs">—</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Soft Skills */}
+                <div className="space-y-3">
+                  <span className="text-white/40 block text-[11px] font-bold uppercase tracking-wider ml-1">背景偏好与软素质</span>
+                  <div className="flex flex-wrap gap-2 pl-0.5">
+                    {formData.culture_fit.length > 0 ? (
+                      formData.culture_fit.map(s => <span key={s} className="text-white bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 text-sm font-bold">{s}</span>)
+                    ) : (
+                      <span className="text-zinc-800 text-xs">—</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Global Footer Buttons */}
         <div className="px-10 py-8 border-t border-white/5 bg-black/40 flex justify-between items-center">
-          <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono tracking-wider"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping"></div>AGENTS STANDBY</div>
+          <div className="flex items-center gap-3 text-xs text-zinc-600 font-mono tracking-[0.2em] font-bold">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            AGENTS_STANDBY
+          </div>
 
-          <MagneticButton onClick={handleGenerate} disabled={isAiThinking} className="group bg-white text-black px-10 py-4 rounded-xl font-bold text-base hover:bg-zinc-200 transition-all flex items-center gap-3 shadow-[0_0_40px_rgba(255,255,255,0.15)] active:scale-95">
-            {isAiThinking ? <Loader2 className="w-5 h-5 animate-spin" /> : <>启动筛选引擎<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
+          <MagneticButton onClick={handleGenerate} disabled={isAiThinking} className="group bg-blue-600 text-white px-12 py-4 rounded-2xl font-bold text-base hover:bg-blue-500 transition-all flex items-center gap-4 shadow-[0_0_50px_rgba(59,130,246,0.3)] active:scale-95 disabled:opacity-50">
+            {isAiThinking ? <Loader2 className="w-5 h-5 animate-spin" /> : <>启动筛选引擎<ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform" /></>}
           </MagneticButton>
-
         </div>
       </div>
     </div>
@@ -1239,7 +1396,7 @@ function ExecutionDashboard({
 function InterviewPanel({ candidates, cache, setCache }: { candidates: CandidateRank[], cache: Record<string, any>, setCache: React.Dispatch<React.SetStateAction<Record<string, any>>> }) {
   const [selectedCandidate, setSelectedCandidate] = useState(candidates[0]);
   const [actionType, setActionType] = useState<'interview' | 'offer' | 'reject'>('interview');
-  // const [contentCache, setContentCache] = useState<Record<string, any>>({}); // Lifted
+  // const [contentCache, setContentCache] = useState<Record<string, any>>({ }); // Lifted
   const [isLoading, setIsLoading] = useState(false);
 
   const cacheKey = selectedCandidate ? `${selectedCandidate.resume_id}-${actionType}` : '';
