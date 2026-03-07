@@ -38,9 +38,11 @@ export interface JobDefinition {
 	key_responsibilities: string[];
 	required_skills: string[];
 	experience_level: string;
+	education: string;
 	salary: SalaryConfig;
 	work_location: string;
 	bonus_skills: string[];
+	culture_fit: string[];
 }
 
 export interface Resume {
@@ -249,7 +251,7 @@ export const api = {
 				// The backend returns the cumulative amount of resumes for the user in the session
 				latestResumes = await res.json();
 			} else {
-				console.error(`Upload failed for ${file.name}`);
+				throw new Error(`包含文件 [${file.name}] 的上传批次解析失败，服务器拒绝了其格式或发生了意外。已中断批量上传。`);
 			}
 		}
 

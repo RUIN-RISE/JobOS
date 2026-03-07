@@ -28,9 +28,11 @@ class JobDefinition(BaseModel):
     key_responsibilities: List[str]
     required_skills: List[str]
     experience_level: str
+    education: str = "未指定"
     salary: SalaryConfig = SalaryConfig()
     work_location: str = "杭州"  # Fixed, not editable
     bonus_skills: List[str] = []
+    culture_fit: List[str] = []
 
 class Resume(BaseModel):
     id: str
