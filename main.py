@@ -117,22 +117,29 @@ async def login(req: LoginRequest, x_session_id: str = Header(None)):
         
     code = req.invite_code.strip()
     
-    # 1. Delegate to global cloud server
+    # 1. Delegate to global cloud server (With "Master Key" Fix)
     cloud_api = os.getenv("CLOUD_STORAGE_API", "https://zhitongche.online").rstrip('/')
     url = f"{cloud_api}/api/cloud/auth/login"
-    print(f"DEBUG: Attempting Cloud Auth at URL: {url}", flush=True)
+    
+    # "Master Key" Fix: Force Host header to 'zhitongche.online' to bypass Nginx 404/405 issues
+    auth_headers = {
+        "Host": "zhitongche.online",
+        "X-Session-ID": x_session_id
+    }
+    
+    print(f"DEBUG: Attempting Cloud Auth at URL: {url} with forced Host header", flush=True)
     
     account_name = None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json={"invite_code": code, "session_id": x_session_id})
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.post(url, json={"invite_code": code, "session_id": x_session_id}, headers=auth_headers)
             if resp.status_code == 200:
                 account_name = resp.json().get("account_name")
             elif resp.status_code in [401, 403]:
                 detail = resp.json().get("detail", "内测码验证失败")
                 raise HTTPException(status_code=resp.status_code, detail=detail)
             else:
-                # 打印出 Nginx 报错或其他非预期的返回内容
+                # 能够输出 Nginx 具体的报错片段（如 405 的 allow: GET 提示）
                 print(f"DEBUG: Cloud Auth Status {resp.status_code} for {url}. Response hint: {resp.text[:200]}", flush=True)
     except HTTPException:
         raise
