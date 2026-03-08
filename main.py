@@ -90,15 +90,17 @@ def get_current_user(x_session_id: str = Header(None)) -> UserState:
 
 import time
 
-# Load invites
+# Load invites (Optional Fallback)
 INVITES_FILE = os.path.join(APP_ROOT, "invites.json")
-try:
-    with open(INVITES_FILE, "r", encoding="utf-8") as f:
-        INVITES_MAP = json.load(f)
-except Exception as e:
-    print(f"Failed to load invites: {e}")
-    print("CRITICAL: invites.json not found or invalid! System started in fail-closed mode.")
-    INVITES_MAP = {}
+INVITES_MAP = {}
+if os.path.exists(INVITES_FILE):
+    try:
+        with open(INVITES_FILE, "r", encoding="utf-8") as f:
+            INVITES_MAP = json.load(f)
+    except Exception as e:
+        print(f"Warning: Failed to load local invites.json: {e}")
+else:
+    print("Notice: No local invites.json found. System will rely on Cloud Auth.")
 
 # ACTIVE_SESSIONS is now managed globally by 163 cloud server
 # We no longer need local ACTIVE_SESSIONS or HEARTBEAT_TIMEOUT
@@ -116,27 +118,35 @@ async def login(req: LoginRequest, x_session_id: str = Header(None)):
         
     code = req.invite_code.strip()
     
-    # Delegate to global cloud server
+    # 1. Delegate to global cloud server
     load_dotenv(override=True)
     cloud_api = os.getenv("CLOUD_STORAGE_API", "https://zhitongche.online")
-    
     url = f"{cloud_api}/api/cloud/auth/login"
+    
+    account_name = None
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(url, json={"invite_code": code, "session_id": x_session_id})
-            resp.raise_for_status()
-            account_name = resp.json().get("account_name")
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code in [401, 403]:
-            detail = e.response.json().get("detail", "Auth failed")
-            raise HTTPException(status_code=e.response.status_code, detail=detail)
-        raise HTTPException(status_code=500, detail="Cloud auth failed")
+            if resp.status_code == 200:
+                account_name = resp.json().get("account_name")
+            elif resp.status_code in [401, 403]:
+                detail = resp.json().get("detail", "内测码验证失败")
+                raise HTTPException(status_code=resp.status_code, detail=detail)
+            else:
+                print(f"Cloud Auth Status {resp.status_code}: {resp.text}")
+    except HTTPException:
+        raise
     except Exception as e:
-        # For resilience, if cloud server is down, fallback to local file logic.
-        if code not in INVITES_MAP:
-            raise HTTPException(status_code=401, detail="云服务未响应且无效的内测码")
-        account_name = INVITES_MAP[code]
-        print(f"Fallback to local auth: {e}")
+        print(f"Cloud Auth Connection Error: {e}")
+        # Fallback to local auth ONLY if cloud fails due to network/server issues
+        if code in INVITES_MAP:
+            account_name = INVITES_MAP[code]
+            print(f"Fallback to local auth successful for {account_name}")
+        else:
+            raise HTTPException(status_code=503, detail="鉴权服务忙（云端连接异常且本地无备份）")
+
+    if not account_name:
+        raise HTTPException(status_code=401, detail="无效的内测码或鉴权失败")
         
     # Ensure UserState exists
     if x_session_id not in SESSIONS:
