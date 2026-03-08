@@ -8,6 +8,7 @@ temp_frontend/dist/
 venv/
 .idea/
 .vscode/
+test/
 
 问题记录.txt
 *.zip
