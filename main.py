@@ -137,7 +137,7 @@ async def login(req: LoginRequest, x_session_id: str = Header(None)):
             if resp.status_code == 200:
                 account_name = resp.json().get("account_name")
             elif resp.status_code in [401, 403]:
-                detail = resp.json().get("detail", "内测码验证失�?)
+                detail = resp.json().get("detail", "内测码验证失败?)
                 raise HTTPException(status_code=resp.status_code, detail=detail)
             else:
                 # 能够输出 Nginx 具体的报错片段（�?405 �?allow: GET 提示�?
