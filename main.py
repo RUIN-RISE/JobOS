@@ -421,7 +421,7 @@ async def fetch_resumes_from_cloud(user: UserState = Depends(get_current_user)):
             return await process_resume_content(response.content, "output_resume.zip", user)
     except Exception as e:
         print(f"Error fetching from cloud: {e}")
-        raise HTTPException(status_code=500, detail=f"无法从云端获取简历数�? {e}")
+        raise HTTPException(status_code=500, detail=f"无法从云端获取简历数? {e}")
 
 @app.get("/api/generate_fake_resumes", response_model=List[Resume])
 async def get_fake_resumes(user: UserState = Depends(get_current_user)):
@@ -459,7 +459,7 @@ async def gen_action(req: ActionRequest, user: UserState = Depends(get_current_u
 
 @app.post("/api/generate_jd_markdown")
 async def generate_jd_markdown_api(user: UserState = Depends(get_current_user)):
-    """使用 LLM 生成可对外发布的完整 JD 文档（Markdown 格式�?""
+    """使用 LLM 生成可对外发布的完整 JD 文档（Markdown 格式）"""
     if not user.current_jd:
         raise HTTPException(status_code=400, detail="No JD in session. Please generate a JD first.")
     md_text = llm.generate_jd_markdown(user.current_jd)
@@ -493,7 +493,7 @@ async def get_history(record_type: str = None, user: UserState = Depends(get_cur
 
 @app.delete("/api/delete_history/{record_id}")
 async def delete_history(record_id: int, user: UserState = Depends(get_current_user)):
-    """代理删除云端历史记录（按主键 id + 账号验权�?""
+    """代理删除云端历史记录（按主键 id + 账号验权）"""
     import os, httpx
     from dotenv import load_dotenv
     load_dotenv(override=True)
@@ -501,7 +501,7 @@ async def delete_history(record_id: int, user: UserState = Depends(get_current_u
     url = f"{cloud_api}/api/cloud/delete_record/{record_id}?account_name={user.account_name}&session_id={user.session_id}"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url)   # 使用 POST 兼容不支�?DELETE 方法的反代环�?
+            resp = await client.post(url)   # 使用 POST 兼容不支?DELETE 方法的反代环?
             resp.raise_for_status()
             return {"status": "success"}
     except Exception as e:
@@ -620,7 +620,7 @@ async def fetch_private_resumes(filename: str, user: UserState = Depends(get_cur
             resp = await client.get(url)
             resp.raise_for_status()
             
-            # 使用现有逻辑解析拉取下来的私有专�?PDF/ZIP
+            # 使用现有逻辑解析拉取下来的私有专?PDF/ZIP
             return await process_resume_content(resp.content, filename, user)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to pull private resume: {e}")
@@ -654,12 +654,12 @@ async def serve_spa(full_path: str):
         return {"error": "API route not found"}, 404
     
     if os.path.exists(FRONTEND_DIST):
-        # 1. 尝试直接�?dist 根目录查找文�?(�?logo_avatar.png, favicon.ico)
+        # 1. 尝试直接?dist 根目录查找文?(?logo_avatar.png, favicon.ico)
         target_file = os.path.join(FRONTEND_DIST, full_path)
         if os.path.isfile(target_file):
             return FileResponse(target_file)
             
-        # 2. 如果文件不存在，回退�?index.html (支持 SPA 路由)
+        # 2. 如果文件不存在，回退?index.html (支持 SPA 路由)
         index_path = os.path.join(FRONTEND_DIST, "index.html")
         if os.path.exists(index_path):
             return FileResponse(index_path)
