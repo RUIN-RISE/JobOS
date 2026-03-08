@@ -1,0 +1,17 @@
+﻿git : Locking support detected on remote "modelscope". Consider enabling it wit
+h:
+所在位置 行:1 字符: 1
++ git push --force modelscope modelscope_master:master 2>&1 | Out-File  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Locking support...abling it with: 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  $ git config lfs.https://oauth2:ms-3d1a3ce0-c44b-4b34-a629-74dcba9fb712@www.m
+odelscope.cn/studios/RuinRise/ZhiRoute.git/info/lfs.locksverify true
+remote: GitLab: You are not allowed to force push code to a protected branch on
+ this project.
+To https://www.modelscope.cn/studios/RuinRise/ZhiRoute.git/
+ ! [remote rejected] modelscope_master -> master (pre-receive hook declined)
+error: failed to push some refs to 'https://www.modelscope.cn/studios/RuinRise/
+ZhiRoute.git/'
