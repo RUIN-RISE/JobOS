@@ -141,7 +141,7 @@ async def login(req: LoginRequest, x_session_id: str = Header(None)):
                 raise HTTPException(status_code=resp.status_code, detail=detail)
             else:
                 # 能够输出 Nginx 具体的报错片段（�?405 �?allow: GET 提示�?
-                print(f"DEBUG: Cloud Auth Status {resp.status_code} for {url}. Response hint: {resp.text[:200]}", flush=True)
+                print(f"DEBUG: Cloud Status {resp.status_code} for {url}. Resp hint: {resp.text[:100]}", flush=True), flush=True)
     except HTTPException:
         raise
     except Exception as e:
